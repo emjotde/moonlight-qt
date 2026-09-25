@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QSemaphore>
+#include <QScopedPointer>
+#include <QSet>
 #include <QWindow>
 
 #include <Limelight.h>
@@ -10,6 +12,8 @@
 #include "video/decoder.h"
 #include "audio/renderers/renderer.h"
 #include "video/overlaymanager.h"
+
+class StreamDock;
 
 class SupportedVideoFormatList : public QList<int>
 {
@@ -99,7 +103,8 @@ class Session : public QObject
     friend class ExecThread;
 
 public:
-    explicit Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences = nullptr);
+    explicit Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences = nullptr,
+                     const QSet<QString>& explicitOptions = {});
 
     // NB: This may not get destroyed for a long time! Don't put any cleanup here.
     // Use Session::exec() or DeferredSessionCleanupTask instead.
@@ -164,9 +169,15 @@ private:
     int getAudioRendererCapabilities(int audioConfiguration);
 
     void getWindowDimensions(int& x, int& y,
-                             int& width, int& height);
+                             int& width, int& height, int displayIndex = -1);
 
-    void toggleFullscreen();
+    bool toggleFullscreen();
+
+    void toggleStreamDock();
+
+    void moveToDisplay(int displayIndex);
+
+    void showDesktopControlError(const QString& message);
 
     void notifyMouseEmulationMode(bool enabled);
 
@@ -240,8 +251,14 @@ private:
     static
     int drSubmitDecodeUnit(PDECODE_UNIT du);
 
-    StreamingPreferences* m_Preferences;
+    QScopedPointer<StreamingPreferences> m_Preferences;
     bool m_IsFullScreen;
+    bool m_PreferredDisplayWarningShown = false;
+#ifdef Q_OS_WIN
+    StreamDock* m_StreamDock = nullptr;
+    bool m_StreamDockUnavailable = false;
+    int m_DockDismissButton = 0;
+#endif
     SupportedVideoFormatList m_SupportedVideoFormats; // Sorted in order of descending priority
     STREAM_CONFIGURATION m_StreamConfig;
     DECODER_RENDERER_CALLBACKS m_VideoCallbacks;

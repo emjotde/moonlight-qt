@@ -1,4 +1,9 @@
 #include "session.h"
+#include "settings/appstreamingsettings.h"
+#include "backend/streamdisplays.h"
+#ifdef Q_OS_WIN
+#include "streamdock.h"
+#endif
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include "backend/richpresencemanager.h"
@@ -537,8 +542,18 @@ bool Session::populateDecoderProperties(SDL_Window* window)
     return true;
 }
 
-Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences)
-    : m_Preferences(preferences ? preferences : StreamingPreferences::get()),
+static StreamingPreferences* resolveStreamPreferences(NvComputer* computer, const NvApp& app,
+                                                     StreamingPreferences* cli,
+                                                     const QSet<QString>& explicitOptions)
+{
+    QSettings settings;
+    const auto profile = AppStreamingSettings::load(settings, computer->uuid, app.id);
+    return AppStreamingSettings::resolve(*StreamingPreferences::get(), profile, cli, explicitOptions);
+}
+
+Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences,
+                 const QSet<QString>& explicitOptions)
+    : m_Preferences(resolveStreamPreferences(computer, app, preferences, explicitOptions)),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
       m_Computer(computer),
       m_App(app),
@@ -1255,11 +1270,14 @@ private:
 };
 
 void Session::getWindowDimensions(int& x, int& y,
-                                  int& width, int& height)
+                                  int& width, int& height, int requestedDisplay)
 {
-    int displayIndex = 0;
+    int displayIndex = requestedDisplay >= 0 ? requestedDisplay : 0;
 
-    if (m_Window != nullptr) {
+    if (requestedDisplay >= 0) {
+        SDL_assert(requestedDisplay < SDL_GetNumVideoDisplays());
+    }
+    else if (m_Window != nullptr) {
         displayIndex = SDL_GetWindowDisplayIndex(m_Window);
         SDL_assert(displayIndex >= 0);
     }
@@ -1288,6 +1306,7 @@ void Session::getWindowDimensions(int& x, int& y,
                             break;
                         }
                     }
+
                     else {
                         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                                     "SDL_GetDisplayBounds(%d) failed: %s",
@@ -1298,6 +1317,28 @@ void Session::getWindowDimensions(int& x, int& y,
             else {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                             "Qt window is not associated with a QScreen!");
+            }
+        }
+        if (!m_Preferences->preferredDisplay.isEmpty()) {
+            const auto displays = StreamDisplays::available();
+            const int preferred = StreamDisplays::find(displays, m_Preferences->preferredDisplay);
+            bool found = false;
+            if (preferred >= 0) {
+                for (int i = 0; i < SDL_GetNumVideoDisplays(); ++i) {
+                    const char* name = SDL_GetDisplayName(i);
+                    SDL_Rect bounds;
+                    if ((name && displays[preferred].name == QString::fromUtf8(name)) ||
+                            (SDL_GetDisplayBounds(i, &bounds) == 0 &&
+                             displays[preferred].geometry.topLeft() == QPoint(bounds.x, bounds.y))) {
+                        displayIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found && !m_PreferredDisplayWarningShown) {
+                m_PreferredDisplayWarningShown = true;
+                emitLaunchWarning(tr("The preferred monitor is unavailable. Using the monitor containing Moonlight."));
             }
         }
     }
@@ -1429,7 +1470,7 @@ void Session::updateOptimalWindowDisplayMode()
     SDL_SetWindowDisplayMode(m_Window, &bestMode);
 }
 
-void Session::toggleFullscreen()
+bool Session::toggleFullscreen()
 {
     bool fullScreen = !(SDL_GetWindowFlags(m_Window) & m_FullScreenFlag);
 
@@ -1449,7 +1490,11 @@ void Session::toggleFullscreen()
 #endif
 
     // Actually enter/leave fullscreen
-    SDL_SetWindowFullscreen(m_Window, fullScreen ? m_FullScreenFlag : 0);
+    if (SDL_SetWindowFullscreen(m_Window, fullScreen ? m_FullScreenFlag : 0) != 0) {
+        showDesktopControlError(tr("Unable to change fullscreen mode: %1").arg(SDL_GetError()));
+        return false;
+    }
+    m_IsFullScreen = fullScreen;
 
 #ifdef Q_OS_DARWIN
     // SDL on macOS has a bug that causes the window size to be reset to crazy
@@ -1467,6 +1512,58 @@ void Session::toggleFullscreen()
     m_InputHandler->updateKeyboardGrabState();
 
     // Input handler might need stop/stop mouse grab after changing modes
+    m_InputHandler->updatePointerRegionLock();
+    return true;
+}
+
+void Session::toggleStreamDock()
+{
+#ifdef Q_OS_WIN
+    if (m_StreamDock) {
+        m_StreamDock->toggle();
+    }
+    else {
+        showDesktopControlError(tr("Stream controls are unavailable for this session."));
+    }
+#endif
+}
+
+void Session::showDesktopControlError(const QString& message)
+{
+    qWarning() << message;
+#ifdef Q_OS_WIN
+    SDL_SysWMinfo info = {};
+    SDL_VERSION(&info.version);
+    HWND owner = SDL_GetWindowWMInfo(m_Window, &info) ? info.info.win.window : nullptr;
+    MessageBoxW(owner, reinterpret_cast<const wchar_t*>(message.utf16()), L"Moonlight", MB_OK | MB_ICONERROR);
+#else
+    emit displayLaunchWarning(message);
+#endif
+}
+
+void Session::moveToDisplay(int displayIndex)
+{
+    if (displayIndex < 0 || displayIndex >= SDL_GetNumVideoDisplays()) {
+        showDesktopControlError(tr("The selected monitor is no longer available."));
+        return;
+    }
+    if (displayIndex == SDL_GetWindowDisplayIndex(m_Window)) {
+        return;
+    }
+    const bool wasFullscreen = (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) != 0;
+    m_InputHandler->raiseAllKeys();
+    if (wasFullscreen && !toggleFullscreen()) {
+        return;
+    }
+    SDL_RestoreWindow(m_Window);
+    int x, y, width, height;
+    getWindowDimensions(x, y, width, height, displayIndex);
+    SDL_SetWindowSize(m_Window, width, height);
+    SDL_SetWindowPosition(m_Window, x, y);
+    updateOptimalWindowDisplayMode();
+    if (wasFullscreen) {
+        toggleFullscreen();
+    }
     m_InputHandler->updatePointerRegionLock();
 }
 
@@ -2004,6 +2101,33 @@ void Session::execInternal()
 
         case SDL_USEREVENT:
             switch (event.user.code) {
+#ifdef Q_OS_WIN
+            case StreamDock::EventCode:
+                if (!m_StreamDock || event.user.windowID != SDL_GetWindowID(m_Window)) {
+                    break;
+                }
+                switch (static_cast<StreamDock::Action>(reinterpret_cast<intptr_t>(event.user.data1))) {
+                case StreamDock::ToggleFullscreen:
+                    m_InputHandler->raiseAllKeys();
+                    toggleFullscreen();
+                    break;
+                case StreamDock::MoveToMonitor:
+                    moveToDisplay(static_cast<int>(reinterpret_cast<intptr_t>(event.user.data2)));
+                    break;
+                case StreamDock::KeyboardMode:
+                    m_InputHandler->setSystemKeyCaptureMode(static_cast<StreamingPreferences::CaptureSysKeysMode>(
+                        reinterpret_cast<intptr_t>(event.user.data2)));
+                    m_StreamDock->setKeyboardMode(m_InputHandler->systemKeyCaptureMode());
+                    break;
+                case StreamDock::Disconnect:
+                    m_Preferences->quitAppAfter = false;
+                    goto DispatchDeferredCleanup;
+                case StreamDock::LocalControls:
+                    m_InputHandler->setLocalControlsActive(event.user.data2 != nullptr);
+                    break;
+                }
+                break;
+#endif
             case SDL_CODE_FRAME_READY:
                 if (m_VideoDecoder != nullptr) {
                     m_VideoDecoder->renderFrameOnMainThread();
@@ -2048,6 +2172,7 @@ void Session::execInternal()
                 m_InputHandler->notifyFocusLost();
                 break;
             case SDL_WINDOWEVENT_FOCUS_GAINED:
+                m_InputHandler->notifyFocusGained();
                 if (m_Preferences->muteOnFocusLoss) {
                     m_AudioMuted = false;
                 }
@@ -2240,6 +2365,20 @@ void Session::execInternal()
             m_InputHandler->updatePointerRegionLock();
 
             SDL_AtomicUnlock(&m_DecoderLock);
+#ifdef Q_OS_WIN
+            // A renderer may replace the native window while keeping the SDL_Window.
+            if (!m_StreamDockUnavailable && (!m_StreamDock || !m_StreamDock->isAttached())) {
+                delete m_StreamDock;
+                m_InputHandler->setLocalControlsActive(false);
+                m_StreamDock = new StreamDock(m_Window, m_InputHandler->systemKeyCaptureMode());
+                if (!m_StreamDock->initialize()) {
+                    delete m_StreamDock;
+                    m_StreamDock = nullptr;
+                    m_StreamDockUnavailable = true;
+                    showDesktopControlError(tr("Unable to create the stream controls dock. Keyboard shortcuts are still available."));
+                }
+            }
+#endif
             break;
 
         case SDL_KEYUP:
@@ -2249,13 +2388,36 @@ void Session::execInternal()
             break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP:
+#ifdef Q_OS_WIN
+            if (m_StreamDock && m_StreamDock->isExpanded()) {
+                if (event.type == SDL_MOUSEBUTTONDOWN) {
+                    m_DockDismissButton = event.button.button;
+                    m_StreamDock->collapse();
+                }
+                break;
+            }
+            if (event.type == SDL_MOUSEBUTTONUP && event.button.button == m_DockDismissButton) {
+                m_DockDismissButton = 0;
+                break;
+            }
+#endif
             presence.runCallbacks();
             m_InputHandler->handleMouseButtonEvent(&event.button);
             break;
         case SDL_MOUSEMOTION:
+#ifdef Q_OS_WIN
+            if (m_StreamDock && m_StreamDock->isExpanded()) {
+                break;
+            }
+#endif
             m_InputHandler->handleMouseMotionEvent(&event.motion);
             break;
         case SDL_MOUSEWHEEL:
+#ifdef Q_OS_WIN
+            if (m_StreamDock && m_StreamDock->isExpanded()) {
+                break;
+            }
+#endif
             m_InputHandler->handleMouseWheelEvent(&event.wheel);
             break;
         case SDL_CONTROLLERAXISMOTION:
@@ -2291,12 +2453,22 @@ void Session::execInternal()
         case SDL_FINGERDOWN:
         case SDL_FINGERMOTION:
         case SDL_FINGERUP:
+#ifdef Q_OS_WIN
+            if (m_StreamDock && m_StreamDock->isExpanded()) {
+                break;
+            }
+#endif
             m_InputHandler->handleTouchFingerEvent(&event.tfinger);
             break;
         }
     }
 
 DispatchDeferredCleanup:
+#ifdef Q_OS_WIN
+    delete m_StreamDock;
+    m_StreamDock = nullptr;
+    m_InputHandler->setLocalControlsActive(false);
+#endif
     // Uncapture the mouse and hide the window immediately,
     // so we can return to the Qt GUI ASAP.
     m_InputHandler->setCaptureActive(false);
@@ -2363,4 +2535,3 @@ DispatchDeferredCleanup:
     // reference.
     QThreadPool::globalInstance()->start(new DeferredSessionCleanupTask(this));
 }
-

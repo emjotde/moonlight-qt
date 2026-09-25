@@ -731,12 +731,13 @@ int main(int argc, char *argv[])
     case GlobalCommandLineParser::StreamRequested:
         {
             initialView = "qrc:/gui/CliStartStreamSegue.qml";
-            StreamingPreferences* preferences = StreamingPreferences::get();
+            auto preferences = new StreamingPreferences(*StreamingPreferences::get(), &app);
             StreamCommandLineParser streamParser;
             streamParser.parse(app.arguments(), preferences);
             QString host    = streamParser.getHost();
             QString appName = streamParser.getAppName();
-            auto launcher   = new CliStartStream::Launcher(host, appName, preferences, &app);
+            auto launcher   = new CliStartStream::Launcher(host, appName, preferences,
+                                                         streamParser.getExplicitOptions(), &app);
             engine.rootContext()->setContextProperty("launcher", launcher);
             break;
         }

@@ -61,6 +61,49 @@ StreamingPreferences::StreamingPreferences(QQmlEngine *qmlEngine)
     reload();
 }
 
+StreamingPreferences::StreamingPreferences(const StreamingPreferences& other, QObject* parent)
+    : QObject(parent),
+      width(other.width),
+      height(other.height),
+      fps(other.fps),
+      bitrateKbps(other.bitrateKbps),
+      unlockBitrate(other.unlockBitrate),
+      enableVsync(other.enableVsync),
+      gameOptimizations(other.gameOptimizations),
+      playAudioOnHost(other.playAudioOnHost),
+      multiController(other.multiController),
+      enableMdns(other.enableMdns),
+      quitAppAfter(other.quitAppAfter),
+      absoluteMouseMode(other.absoluteMouseMode),
+      absoluteTouchMode(other.absoluteTouchMode),
+      framePacing(other.framePacing),
+      connectionWarnings(other.connectionWarnings),
+      richPresence(other.richPresence),
+      gamepadMouse(other.gamepadMouse),
+      detectNetworkBlocking(other.detectNetworkBlocking),
+      showPerformanceOverlay(other.showPerformanceOverlay),
+      swapMouseButtons(other.swapMouseButtons),
+      muteOnFocusLoss(other.muteOnFocusLoss),
+      backgroundGamepad(other.backgroundGamepad),
+      reverseScrollDirection(other.reverseScrollDirection),
+      swapFaceButtons(other.swapFaceButtons),
+      keepAwake(other.keepAwake),
+      packetSize(other.packetSize),
+      audioConfig(other.audioConfig),
+      videoCodecConfig(other.videoCodecConfig),
+      enableHdr(other.enableHdr),
+      enableYUV444(other.enableYUV444),
+      videoDecoderSelection(other.videoDecoderSelection),
+      windowMode(other.windowMode),
+      recommendedFullScreenMode(other.recommendedFullScreenMode),
+      uiDisplayMode(other.uiDisplayMode),
+      language(other.language),
+      captureSysKeysMode(other.captureSysKeysMode),
+      preferredDisplay(other.preferredDisplay),
+      m_QmlEngine(nullptr)
+{
+}
+
 StreamingPreferences* StreamingPreferences::get(QQmlEngine *qmlEngine)
 {
     {
@@ -101,6 +144,7 @@ StreamingPreferences* StreamingPreferences::get(QQmlEngine *qmlEngine)
 void StreamingPreferences::reload()
 {
     QSettings settings;
+    preferredDisplay.clear();
 
     int defaultVer = settings.value(SER_DEFAULTVER, 0).toInt();
 

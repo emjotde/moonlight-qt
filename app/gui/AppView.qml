@@ -18,7 +18,7 @@ CenteredGridView {
     activeFocusOnTab: true
     topMargin: 20
     bottomMargin: 5
-    cellWidth: 230; cellHeight: 297;
+    cellWidth: 230; cellHeight: 337;
 
     function computerLost()
     {
@@ -71,11 +71,13 @@ CenteredGridView {
     model: appModel
 
     delegate: NavigableItemDelegate {
-        width: 220; height: 287;
+        width: 220; height: 327;
         grid: appGrid
 
         property alias appContextMenu: appContextMenuLoader.item
         property alias appNameText: appNameTextLoader.item
+
+        Accessible.name: model.name
 
         // Dim the app if it's hidden
         opacity: model.hidden ? 0.4 : 1.0
@@ -113,7 +115,24 @@ CenteredGridView {
             ToolTip.text: model.name
             ToolTip.delay: 1000
             ToolTip.timeout: 5000
-            ToolTip.visible: (parent.hovered || parent.highlighted) && (!appNameText || appNameText.truncated)
+            ToolTip.visible: (parent.hovered || parent.highlighted) &&
+                             (isPlaceholder ? (!appNameText || appNameText.truncated) : appNameCaption.truncated)
+        }
+
+        Label {
+            id: appNameCaption
+            anchors.top: appIcon.bottom
+            anchors.topMargin: 6
+            anchors.left: appIcon.left
+            anchors.right: appIcon.right
+            height: 36
+            visible: !appIcon.isPlaceholder
+            text: model.name
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
+            elide: Text.ElideRight
         }
 
         Loader {
@@ -311,6 +330,11 @@ CenteredGridView {
                 }
                 NavigableMenuItem {
                     parentMenu: appContextMenu
+                    text: qsTr("Stream settings...")
+                    onTriggered: streamSettingsDialog.openForApp(model.appid, model.name)
+                }
+                NavigableMenuItem {
+                    parentMenu: appContextMenu
                     checkable: true
                     checked: model.directLaunch
                     text: qsTr("Direct Launch")
@@ -337,6 +361,11 @@ CenteredGridView {
                 }
             }
         }
+    }
+
+    AppStreamSettingsDialog {
+        id: streamSettingsDialog
+        appModel: appGrid.appModel
     }
 
     NavigableMessageDialog {

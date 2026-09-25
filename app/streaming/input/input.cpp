@@ -10,7 +10,8 @@
 #include <QGuiApplication>
 
 SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, int streamHeight)
-    : m_MultiController(prefs.multiController),
+    : m_Window(nullptr),
+      m_MultiController(prefs.multiController),
       m_GamepadMouse(prefs.gamepadMouse),
       m_SwapMouseButtons(prefs.swapMouseButtons),
       m_ReverseScrollDirection(prefs.reverseScrollDirection),
@@ -80,6 +81,15 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_SpecialKeyCombos[KeyComboToggleFullScreen].keyCode = SDLK_x;
     m_SpecialKeyCombos[KeyComboToggleFullScreen].scanCode = SDL_SCANCODE_X;
     m_SpecialKeyCombos[KeyComboToggleFullScreen].enabled = QGuiApplication::platformName() != "eglfs";
+
+    m_SpecialKeyCombos[KeyComboToggleDock].keyCombo = KeyComboToggleDock;
+    m_SpecialKeyCombos[KeyComboToggleDock].keyCode = SDLK_b;
+    m_SpecialKeyCombos[KeyComboToggleDock].scanCode = SDL_SCANCODE_B;
+#ifdef Q_OS_WIN
+    m_SpecialKeyCombos[KeyComboToggleDock].enabled = true;
+#else
+    m_SpecialKeyCombos[KeyComboToggleDock].enabled = false;
+#endif
 
     m_SpecialKeyCombos[KeyComboToggleStatsOverlay].keyCombo = KeyComboToggleStatsOverlay;
     m_SpecialKeyCombos[KeyComboToggleStatsOverlay].keyCode = SDLK_s;
@@ -289,13 +299,22 @@ void SdlInputHandler::notifyFocusLost()
     // This lets user to interact with our window's title bar and with the buttons in it.
     // Doing this while the window is full-screen breaks the transition out of FS
     // (desktop and exclusive), so we must check for that before releasing mouse capture.
-    if (!(SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) && !m_AbsoluteMouseMode) {
+    if (!m_LocalControlsActive &&
+            !(SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) && !m_AbsoluteMouseMode) {
         setCaptureActive(false);
     }
 
     // Raise all keys that are currently pressed. If we don't do this, certain keys
     // used in shortcuts that cause focus loss (such as Alt+Tab) may get stuck down.
     raiseAllKeys();
+}
+
+void SdlInputHandler::notifyFocusGained()
+{
+    if (m_ResumeCaptureOnFocus) {
+        m_ResumeCaptureOnFocus = false;
+        setCaptureActive(true);
+    }
 }
 
 bool SdlInputHandler::isCaptureActive()
@@ -310,17 +329,20 @@ bool SdlInputHandler::isCaptureActive()
 
 void SdlInputHandler::updateKeyboardGrabState()
 {
-    if (m_CaptureSystemKeysMode == StreamingPreferences::CSK_OFF) {
+    if (!m_Window) {
         return;
     }
 
-    bool shouldGrab = isCaptureActive();
-    Uint32 windowFlags = SDL_GetWindowFlags(m_Window);
-    if (m_CaptureSystemKeysMode == StreamingPreferences::CSK_FULLSCREEN &&
-            !(windowFlags & SDL_WINDOW_FULLSCREEN)) {
-        // Ungrab if it's fullscreen only and we left fullscreen
-        shouldGrab = false;
+    const bool shouldGrab = KeyboardRouting::shouldCapture(
+        m_CaptureSystemKeysMode, (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) != 0,
+        isCaptureActive(), m_LocalControlsActive);
+
+#if SDL_VERSION_ATLEAST(2, 0, 15)
+    if ((SDL_GetWindowKeyboardGrab(m_Window) == SDL_TRUE) != shouldGrab) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "System shortcuts: %s (routing mode %d)",
+                    shouldGrab ? "remote" : "local", static_cast<int>(m_CaptureSystemKeysMode));
     }
+#endif
 
     // Don't close the window on Alt+F4 when keyboard grab is enabled
     SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, shouldGrab ? "1" : "0");
@@ -332,9 +354,45 @@ void SdlInputHandler::updateKeyboardGrabState()
 #endif
 }
 
+void SdlInputHandler::setSystemKeyCaptureMode(StreamingPreferences::CaptureSysKeysMode mode)
+{
+    if (mode < StreamingPreferences::CSK_OFF || mode > StreamingPreferences::CSK_ALWAYS) {
+        qWarning() << "Invalid system shortcut routing mode:" << mode;
+        return;
+    }
+    raiseAllKeys();
+    m_CaptureSystemKeysMode = mode;
+    updateKeyboardGrabState();
+}
+
+void SdlInputHandler::setLocalControlsActive(bool active)
+{
+    if (active == m_LocalControlsActive) {
+        return;
+    }
+    raiseAllKeys();
+    if (active) {
+        m_CaptureBeforeLocalControls = isCaptureActive();
+        setCaptureActive(false);
+        m_LocalControlsActive = true;
+    }
+    else {
+        m_LocalControlsActive = false;
+        if (m_CaptureBeforeLocalControls) {
+            if (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_INPUT_FOCUS) {
+                setCaptureActive(true);
+            }
+            else {
+                m_ResumeCaptureOnFocus = true;
+            }
+        }
+    }
+    updateKeyboardGrabState();
+}
+
 bool SdlInputHandler::isSystemKeyCaptureActive()
 {
-    if (m_CaptureSystemKeysMode == StreamingPreferences::CSK_OFF) {
+    if (m_LocalControlsActive || m_CaptureSystemKeysMode == StreamingPreferences::CSK_OFF) {
         return false;
     }
 
@@ -364,6 +422,11 @@ bool SdlInputHandler::isSystemKeyCaptureActive()
 
 void SdlInputHandler::setCaptureActive(bool active)
 {
+    if (m_LocalControlsActive) {
+        m_CaptureBeforeLocalControls = active;
+        return;
+    }
+
     if (active) {
         // If we're in relative mode, try to activate SDL's relative mouse mode
         if (m_AbsoluteMouseMode || SDL_SetRelativeMouseMode(SDL_TRUE) < 0) {

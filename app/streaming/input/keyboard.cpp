@@ -139,6 +139,11 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
         updatePointerRegionLock();
         break;
 
+    case KeyComboToggleDock:
+        raiseAllKeys();
+        Session::get()->toggleStreamDock();
+        break;
+
     default:
         Q_UNREACHABLE();
     }
@@ -184,6 +189,16 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
                 return;
             }
         }
+    }
+
+    if (m_LocalControlsActive) {
+        return;
+    }
+    if (m_KeyboardRouting.consumeLocalShortcut(*event, isSystemKeyCaptureActive())) {
+        // Windows must receive the whole shortcut without leaking a bare arrow
+        // or leaving a previously forwarded modifier pressed on the host.
+        raiseAllKeys();
+        return;
     }
 
     // Set modifier flags

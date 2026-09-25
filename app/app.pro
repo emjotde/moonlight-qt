@@ -170,6 +170,7 @@ macx {
 
 SOURCES += \
     backend/nvaddress.cpp \
+    backend/streamdisplays.cpp \
     backend/nvapp.cpp \
     cli/pair.cpp \
     main.cpp \
@@ -188,6 +189,7 @@ SOURCES += \
     settings/compatfetcher.cpp \
     settings/mappingfetcher.cpp \
     settings/streamingpreferences.cpp \
+    settings/appstreamingsettings.cpp \
     streaming/input/abstouch.cpp \
     streaming/input/gamepad.cpp \
     streaming/input/input.cpp \
@@ -210,6 +212,7 @@ SOURCES += \
 
 HEADERS += \
     backend/nvaddress.h \
+    backend/streamdisplays.h \
     backend/nvapp.h \
     cli/pair.h \
     settings/compatfetcher.h \
@@ -228,7 +231,9 @@ HEADERS += \
     cli/quitstream.h \
     cli/startstream.h \
     settings/streamingpreferences.h \
+    settings/appstreamingsettings.h \
     streaming/input/input.h \
+    streaming/input/keyboardrouting.h \
     streaming/session.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
@@ -376,6 +381,8 @@ config_SL {
 }
 win32 {
     HEADERS += streaming/video/ffmpeg-renderers/dxutil.h
+    SOURCES += streaming/streamdock.cpp
+    HEADERS += streaming/streamdock.h
 }
 win32:!winrt {
     message(DXVA2 and D3D11VA renderers selected)

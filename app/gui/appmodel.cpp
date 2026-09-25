@@ -1,4 +1,6 @@
 #include "appmodel.h"
+#include "settings/appstreamingsettings.h"
+#include "backend/streamdisplays.h"
 
 AppModel::AppModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -45,6 +47,72 @@ Session* AppModel::createSessionForApp(int appIndex)
     NvApp app = m_VisibleApps.at(appIndex);
 
     return new Session(m_Computer, app);
+}
+
+bool AppModel::containsAppId(int appId) const
+{
+    for (const NvApp& app : m_AllApps) {
+        if (app.id == appId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QVariantMap AppModel::getAppStreamingSettings(int appId)
+{
+    QSettings settings;
+    QString error;
+    const auto profile = AppStreamingSettings::load(settings, m_Computer->uuid, appId, &error);
+    const auto global = StreamingPreferences::get();
+    return {
+        {"enabled", profile.enabled},
+        {"width", profile.enabled ? profile.width : global->width},
+        {"height", profile.enabled ? profile.height : global->height},
+        {"fps", profile.enabled ? profile.fps : global->fps},
+        {"bitrateKbps", profile.bitrateKbps},
+        {"globalBitrateKbps", global->bitrateKbps},
+        {"windowMode", profile.windowMode},
+        {"captureSysKeysMode", profile.captureSysKeysMode},
+        {"preferredDisplay", profile.preferredDisplay},
+        {"error", error},
+    };
+}
+
+QVariantList AppModel::getStreamDisplays()
+{
+    QVariantList displays;
+    for (const auto& display : StreamDisplays::available()) {
+        displays.append(QVariantMap{{"id", display.id}, {"text", display.description}});
+    }
+    return displays;
+}
+
+QString AppModel::saveAppStreamingSettings(int appId, int width, int height, int fps, int bitrateKbps,
+                                           int windowMode, int captureSysKeysMode, QString preferredDisplay)
+{
+    if (!containsAppId(appId)) {
+        qWarning() << "Cannot save stream settings for an application that is no longer available";
+        return tr("This application is no longer available. Reopen its stream settings.");
+    }
+
+    AppStreamingOverride profile;
+    profile.enabled = true;
+    profile.width = width;
+    profile.height = height;
+    profile.fps = fps;
+    profile.bitrateKbps = bitrateKbps;
+    profile.windowMode = windowMode;
+    profile.captureSysKeysMode = captureSysKeysMode;
+    profile.preferredDisplay = preferredDisplay;
+    QSettings settings;
+    return AppStreamingSettings::save(settings, m_Computer->uuid, appId, profile);
+}
+
+QString AppModel::removeAppStreamingSettings(int appId)
+{
+    QSettings settings;
+    return AppStreamingSettings::remove(settings, m_Computer->uuid, appId);
 }
 
 int AppModel::getDirectLaunchAppIndex()

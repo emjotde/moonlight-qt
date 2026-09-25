@@ -386,6 +386,11 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.handleUnknownOptions();
 
     // Resolve display's width and height
+    m_ExplicitOptions.clear();
+    for (const QString& option : parser.optionNames()) {
+        m_ExplicitOptions.insert(option);
+    }
+
     QRegularExpression resolutionRexExp("^(720|1080|1440|4K|resolution)$");
     QStringList resoOptions = parser.optionNames().filter(resolutionRexExp);
     bool displaySet = !resoOptions.isEmpty();
@@ -538,6 +543,11 @@ QString StreamCommandLineParser::getHost() const
 QString StreamCommandLineParser::getAppName() const
 {
     return m_AppName;
+}
+
+QSet<QString> StreamCommandLineParser::getExplicitOptions() const
+{
+    return m_ExplicitOptions;
 }
 
 ListCommandLineParser::ListCommandLineParser()

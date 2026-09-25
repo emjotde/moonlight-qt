@@ -102,7 +102,7 @@ public:
                     m_TimeoutTimer->stop();
                     if (isNotStreaming() || isStreamingApp(app)) {
                         m_State = StateStartSession;
-                        session = new Session(m_Computer, app, m_Preferences);
+                        session = new Session(m_Computer, app, m_Preferences, m_ExplicitOptions);
                         emit q->sessionCreated(app.name, session);
                     } else {
                         emit q->appQuitRequired(getCurrentAppName());
@@ -174,6 +174,7 @@ public:
     QString m_ComputerName;
     QString m_AppName;
     StreamingPreferences *m_Preferences;
+    QSet<QString> m_ExplicitOptions;
     ComputerManager *m_ComputerManager;
     ComputerSeeker *m_ComputerSeeker;
     NvComputer *m_Computer;
@@ -182,7 +183,7 @@ public:
 };
 
 Launcher::Launcher(QString computer, QString app,
-                   StreamingPreferences* preferences, QObject *parent)
+                   StreamingPreferences* preferences, const QSet<QString>& explicitOptions, QObject *parent)
     : QObject(parent),
       m_DPtr(new LauncherPrivate(this))
 {
@@ -190,6 +191,7 @@ Launcher::Launcher(QString computer, QString app,
     d->m_ComputerName = computer;
     d->m_AppName = app;
     d->m_Preferences = preferences;
+    d->m_ExplicitOptions = explicitOptions;
     d->m_State = StateInit;
     d->m_TimeoutTimer = new QTimer(this);
     d->m_TimeoutTimer->setSingleShot(true);

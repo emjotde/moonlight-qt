@@ -11,6 +11,8 @@ class StreamingPreferences : public QObject
 public:
     static StreamingPreferences* get(QQmlEngine *qmlEngine = nullptr);
 
+    explicit StreamingPreferences(const StreamingPreferences& other, QObject* parent = nullptr);
+
     Q_INVOKABLE static int
     getDefaultBitrate(int width, int height, int fps, bool yuv444);
 
@@ -180,6 +182,7 @@ public:
     UIDisplayMode uiDisplayMode;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;
+    QString preferredDisplay;
 
 signals:
     void displayModeChanged();
@@ -223,4 +226,3 @@ private:
 
     QQmlEngine* m_QmlEngine;
 };
-

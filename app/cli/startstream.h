@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QSet>
 #include <QVariant>
 
 class ComputerManager;
@@ -22,6 +23,7 @@ class Launcher : public QObject
 public:
     explicit Launcher(QString computer, QString app,
                       StreamingPreferences* preferences,
+                      const QSet<QString>& explicitOptions,
                       QObject *parent = nullptr);
     ~Launcher();
     Q_INVOKABLE void execute(ComputerManager *manager);

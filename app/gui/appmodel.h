@@ -41,6 +41,15 @@ public:
 
     Q_INVOKABLE void setAppDirectLaunch(int appIndex, bool directLaunch);
 
+    Q_INVOKABLE QVariantMap getAppStreamingSettings(int appId);
+
+    Q_INVOKABLE QString saveAppStreamingSettings(int appId, int width, int height, int fps, int bitrateKbps,
+                                                int windowMode, int captureSysKeysMode, QString preferredDisplay);
+
+    Q_INVOKABLE QVariantList getStreamDisplays();
+
+    Q_INVOKABLE QString removeAppStreamingSettings(int appId);
+
     QVariant data(const QModelIndex &index, int role) const override;
 
     int rowCount(const QModelIndex &parent) const override;
@@ -56,6 +65,8 @@ signals:
     void computerLost();
 
 private:
+    bool containsAppId(int appId) const;
+
     void updateAppList(QVector<NvApp> newList);
 
     QVector<NvApp> getVisibleApps(const QVector<NvApp>& appList);

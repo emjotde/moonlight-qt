@@ -2,6 +2,7 @@
 
 #include "settings/streamingpreferences.h"
 #include "backend/computermanager.h"
+#include "keyboardrouting.h"
 
 #include <SDL.h>
 
@@ -105,6 +106,8 @@ public:
 
     void notifyFocusLost();
 
+    void notifyFocusGained();
+
     bool isCaptureActive();
 
     bool isSystemKeyCaptureActive();
@@ -114,6 +117,12 @@ public:
     bool isMouseInVideoRegion(int mouseX, int mouseY, int windowWidth = -1, int windowHeight = -1);
 
     void updateKeyboardGrabState();
+
+    void setSystemKeyCaptureMode(StreamingPreferences::CaptureSysKeysMode mode);
+
+    StreamingPreferences::CaptureSysKeysMode systemKeyCaptureMode() const { return m_CaptureSystemKeysMode; }
+
+    void setLocalControlsActive(bool active);
 
     void updatePointerRegionLock();
 
@@ -131,6 +140,7 @@ private:
         KeyComboToggleMinimize,
         KeyComboPasteText,
         KeyComboTogglePointerRegionLock,
+        KeyComboToggleDock,
         KeyComboMax
     };
 
@@ -186,6 +196,10 @@ private:
     QString m_OldIgnoreDevicesExcept;
     QStringList m_IgnoreDeviceGuids;
     StreamingPreferences::CaptureSysKeysMode m_CaptureSystemKeysMode;
+    KeyboardRouting m_KeyboardRouting;
+    bool m_LocalControlsActive = false;
+    bool m_CaptureBeforeLocalControls = false;
+    bool m_ResumeCaptureOnFocus = false;
     int m_MouseCursorCapturedVisibilityState;
 
     struct {
