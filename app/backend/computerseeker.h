@@ -14,6 +14,9 @@ public:
 
     void start(int timeout);
 
+    static NvComputer* findComputer(ComputerManager* manager, const QString& identifier);
+    static bool matchesComputer(const NvComputer* computer, const QString& identifier);
+
 signals:
     void computerFound(NvComputer *computer);
     void errorTimeout();
@@ -23,7 +26,6 @@ private slots:
     void onTimeout();
 
 private:
-    bool matchComputer(NvComputer *computer) const;
     bool isOnline(NvComputer *computer) const;
 
 private:

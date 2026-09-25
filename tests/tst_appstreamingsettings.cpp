@@ -1,5 +1,6 @@
 #include "settings/appstreamingsettings.h"
 #include "settings/streamingpreferences.h"
+#include "settings/externallaunchtrust.h"
 #include "cli/commandlineparser.h"
 #include "backend/streamdisplays.h"
 #include "backend/nvapp.h"
@@ -16,6 +17,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QTemporaryDir>
+#include <QSignalSpy>
 
 static AppStreamingOverride portraitProfile()
 {
@@ -688,6 +690,102 @@ private slots:
                                "moonlight://stream?host=h&app=Desktop"}),
                  GlobalCommandLineParser::UriRequested);
         QCOMPARE(parser.getUri(), QString("moonlight://stream?host=h&app=Desktop"));
+    }
+
+    void launchRequestSourcesAreTyped()
+    {
+        StreamCommandLineParser cliParser;
+        const auto cli = cliParser.parse(
+            {"moonlight", "stream", "host-a", "Desktop"},
+            *StreamingPreferences::get());
+        QCOMPARE(cli.source, StreamLaunchRequest::CliSource);
+
+        const auto uri = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=Desktop",
+            *StreamingPreferences::get());
+        QVERIFY2(uri.isValid(), qPrintable(uri.error));
+        QCOMPARE(uri.request.source, StreamLaunchRequest::UriSource);
+        QCOMPARE(StreamLaunchRequest().source, StreamLaunchRequest::GuiSource);
+    }
+
+    void externalLaunchConfirmationSettingPersists()
+    {
+        auto preferences = StreamingPreferences::get();
+        QVERIFY(preferences->confirmExternalLaunchRequests);
+        preferences->confirmExternalLaunchRequests = false;
+        preferences->save();
+        preferences->confirmExternalLaunchRequests = true;
+        preferences->reload();
+        QVERIFY(!preferences->confirmExternalLaunchRequests);
+    }
+
+    void externalLaunchTrustUsesStableHostUuid()
+    {
+        QSettings settings;
+        QVERIFY(!ExternalLaunchTrust::isTrusted(settings, "stable-host-uuid"));
+        QCOMPARE(ExternalLaunchTrust::trustHost(settings, "stable-host-uuid"), QString());
+        QVERIFY(ExternalLaunchTrust::isTrusted(settings, "stable-host-uuid"));
+        QVERIFY(!ExternalLaunchTrust::isTrusted(settings, "192.0.2.10"));
+        QVERIFY(!ExternalLaunchTrust::isTrusted(settings, "other-host-uuid"));
+
+        QSettings reopened;
+        QVERIFY(ExternalLaunchTrust::isTrusted(reopened, "stable-host-uuid"));
+        QCOMPARE(ExternalLaunchTrust::removeHostTrust(reopened, "stable-host-uuid"), QString());
+        QVERIFY(!ExternalLaunchTrust::isTrusted(reopened, "stable-host-uuid"));
+    }
+
+    void externalLaunchConfirmationPolicy_data()
+    {
+        QTest::addColumn<bool>("enabled");
+        QTest::addColumn<bool>("paired");
+        QTest::addColumn<bool>("trusted");
+        QTest::addColumn<bool>("expected");
+        QTest::newRow("default") << true << true << false << true;
+        QTest::newRow("trusted") << true << true << true << false;
+        QTest::newRow("disabled") << false << true << false << false;
+        QTest::newRow("unpaired") << true << false << false << false;
+    }
+
+    void externalLaunchConfirmationPolicy()
+    {
+        QFETCH(bool, enabled);
+        QFETCH(bool, paired);
+        QFETCH(bool, trusted);
+        QFETCH(bool, expected);
+        QCOMPARE(ExternalLaunchTrust::shouldConfirm(enabled, paired, trusted), expected);
+    }
+
+    void externalLaunchDialogShowsDetailsAndCancels()
+    {
+        QQmlEngine engine;
+        QQuickItem focusTarget;
+        engine.rootContext()->setContextProperty("stackView", &focusTarget);
+        QQmlComponent component(&engine);
+        component.setData(R"(
+            import QtQuick 2.9
+            import QtQuick.Controls 2.2
+            ApplicationWindow {
+                width: 900; height: 600; visible: true
+                ExternalLaunchDialog {
+                    details: "Host: Test Host\nApplication: Portrait Desktop\nResolution: 2160 x 3840 at 60 FPS\nDisplay mode: Fullscreen"
+                }
+            }
+        )", QUrl::fromLocalFile(QStringLiteral(TEST_GUI_DIR "/ExternalLaunchTest.qml")));
+        QScopedPointer<QObject> window(component.create());
+        QVERIFY2(window, qPrintable(component.errorString()));
+        auto dialog = window->findChild<QObject*>("externalLaunchDialog");
+        auto details = window->findChild<QObject*>("externalLaunchDetails");
+        auto launchOnce = window->findChild<QObject*>("launchOnceButton");
+        auto alwaysAllow = window->findChild<QObject*>("alwaysAllowButton");
+        auto cancel = window->findChild<QObject*>("cancelExternalLaunchButton");
+        QVERIFY(dialog && details && launchOnce && alwaysAllow && cancel);
+        QVERIFY(details->property("text").toString().contains("Portrait Desktop"));
+        QVERIFY(details->property("text").toString().contains("2160 x 3840 at 60 FPS"));
+        QSignalSpy cancelled(dialog, SIGNAL(cancelled()));
+        QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        QVERIFY(QMetaObject::invokeMethod(dialog, "reject"));
+        QCOMPARE(cancelled.count(), 1);
     }
 
     void oldProfilesInheritDesktopPreferences()

@@ -361,6 +361,7 @@ StreamLaunchRequest StreamCommandLineParser::parse(const QStringList &args,
                                                    const StreamingPreferences& globalPreferences)
 {
     StreamLaunchRequest request;
+    request.source = StreamLaunchRequest::CliSource;
     request.cliOverrides = StreamLaunchOverrides(globalPreferences);
     auto preferences = request.cliOverrides.values();
 

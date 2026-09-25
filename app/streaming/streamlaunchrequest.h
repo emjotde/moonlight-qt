@@ -68,9 +68,17 @@ private:
 
 struct StreamLaunchRequest
 {
+    enum Source
+    {
+        GuiSource,
+        CliSource,
+        UriSource,
+    };
+
     QString host;
     QString appName;
     int appId = 0;
+    Source source = GuiSource;
     StreamLaunchOverrides cliOverrides;
     StreamLaunchOverrides uriOverrides;
 

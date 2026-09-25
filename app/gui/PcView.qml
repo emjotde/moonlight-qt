@@ -296,19 +296,8 @@ CenteredGridView {
         helpUrl: "https://github.com/moonlight-stream/moonlight-docs/wiki/Setup-Guide"
     }
 
-    NavigableMessageDialog {
+    PairingDialog {
         id: pairDialog
-
-        // Pairing dialog must be modal to prevent double-clicks from triggering
-        // pairing twice
-        modal: true
-        closePolicy: Popup.CloseOnEscape
-
-        // don't allow edits to the rest of the window while open
-        property string pin : "0000"
-        text:qsTr("Please enter %1 on your host PC. This dialog will close when pairing is completed.").arg(pin)+"\n\n"+
-             qsTr("If your host PC is running Sunshine, navigate to the Sunshine web UI to enter the PIN.")
-        standardButtons: Dialog.Cancel
         onRejected: {
             // FIXME: We should interrupt pairing here
         }

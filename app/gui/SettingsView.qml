@@ -788,6 +788,23 @@ Flickable {
                 }
 
                 CheckBox {
+                    id: confirmExternalLaunchCheck
+                    hoverEnabled: true
+                    width: parent.width
+                    text: qsTr("Confirm external launch requests")
+                    font.pointSize: 12
+                    checked: StreamingPreferences.confirmExternalLaunchRequests
+                    onCheckedChanged: {
+                        StreamingPreferences.confirmExternalLaunchRequests = checked
+                    }
+
+                    ToolTip.delay: 1000
+                    ToolTip.timeout: 10000
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Ask before launching streams requested by moonlight:// links. You can permanently trust individual paired hosts from the confirmation dialog.")
+                }
+
+                CheckBox {
                     id: vsyncCheck
                     width: parent.width
                     hoverEnabled: true

@@ -107,6 +107,7 @@ UriLaunchParseResult UriLaunchRequestParser::parse(
     const StreamingPreferences& globalPreferences)
 {
     UriLaunchParseResult result;
+    result.request.source = StreamLaunchRequest::UriSource;
     if (uri.isEmpty() || uri.size() > MaxUriLength) {
         result.error = QObject::tr("The Moonlight URI is empty or exceeds %1 characters.")
                            .arg(MaxUriLength);

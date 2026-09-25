@@ -23,6 +23,8 @@ public:
     ~Launcher();
     Q_INVOKABLE void execute(ComputerManager *manager);
     Q_INVOKABLE void quitRunningApp();
+    Q_INVOKABLE void approveExternalLaunch(bool alwaysAllow);
+    Q_INVOKABLE void cancelExternalLaunch();
     Q_INVOKABLE bool isExecuted() const;
 
 signals:
@@ -31,12 +33,17 @@ signals:
     void sessionCreated(QString appName, Session *session);
     void failed(QString text);
     void appQuitRequired(QString appName);
+    void pairingRequired(QString hostName, QString pin);
+    void pairingFinished();
+    void externalLaunchConfirmationRequired(QString details);
+    void externalLaunchCancelled();
 
 private slots:
     void onComputerFound(NvComputer *computer);
     void onComputerUpdated(NvComputer *computer);
     void onTimeout();
     void onQuitAppCompleted(QVariant error);
+    void onPairingCompleted(NvComputer* computer, QString error);
 
 private:
     QScopedPointer<LauncherPrivate> m_DPtr;

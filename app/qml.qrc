@@ -14,6 +14,8 @@
         <file>gui/CliQuitStreamSegue.qml</file>
         <file>gui/CliStartStreamSegue.qml</file>
         <file>gui/UriLaunchError.qml</file>
+        <file>gui/PairingDialog.qml</file>
+        <file>gui/ExternalLaunchDialog.qml</file>
         <file>gui/AutoResizingComboBox.qml</file>
         <file>gui/NavigableMenu.qml</file>
         <file>gui/ErrorMessageDialog.qml</file>

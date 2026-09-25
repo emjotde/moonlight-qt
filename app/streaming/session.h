@@ -104,7 +104,7 @@ class Session : public QObject
     friend class ExecThread;
 
 public:
-    explicit Session(NvComputer* computer, NvApp& app,
+    explicit Session(NvComputer* computer, const NvApp& app,
                      const StreamLaunchRequest& request = StreamLaunchRequest());
 
     // NB: This may not get destroyed for a long time! Don't put any cleanup here.

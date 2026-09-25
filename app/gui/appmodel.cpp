@@ -47,6 +47,7 @@ Session* AppModel::createSessionForApp(int appIndex)
     NvApp app = m_VisibleApps.at(appIndex);
 
     StreamLaunchRequest request;
+    request.source = StreamLaunchRequest::GuiSource;
     request.host = m_Computer->uuid;
     request.appId = app.id;
     request.appName = app.name;

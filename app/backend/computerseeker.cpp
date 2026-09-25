@@ -8,7 +8,7 @@ ComputerSeeker::ComputerSeeker(ComputerManager *manager, QString computerName, Q
 {
     // If we know this computer, send a WOL packet to wake it up in case it is asleep.
     for (NvComputer * computer: m_ComputerManager->getComputers()) {
-        if (this->matchComputer(computer)) {
+        if (matchesComputer(computer, m_ComputerName)) {
             computer->wake();
         }
     }
@@ -36,16 +36,16 @@ void ComputerSeeker::onComputerUpdated(NvComputer *computer)
     if (!m_TimeoutTimer->isActive()) {
         return;
     }
-    if (matchComputer(computer) && isOnline(computer)) {
+    if (matchesComputer(computer, m_ComputerName) && isOnline(computer)) {
         m_ComputerManager->stopPollingAsync();
         m_TimeoutTimer->stop();
         emit computerFound(computer);
     }
 }
 
-bool ComputerSeeker::matchComputer(NvComputer *computer) const
+bool ComputerSeeker::matchesComputer(const NvComputer* computer, const QString& identifier)
 {
-    QString value = m_ComputerName.toLower();
+    const QString value = identifier.toLower();
 
     if (computer->name.toLower() == value || computer->uuid.toLower() == value) {
         return true;
@@ -58,6 +58,16 @@ bool ComputerSeeker::matchComputer(NvComputer *computer) const
     }
 
     return false;
+}
+
+NvComputer* ComputerSeeker::findComputer(ComputerManager* manager, const QString& identifier)
+{
+    for (NvComputer* computer : manager->getComputers()) {
+        if (matchesComputer(computer, identifier)) {
+            return computer;
+        }
+    }
+    return nullptr;
 }
 
 bool ComputerSeeker::isOnline(NvComputer *computer) const

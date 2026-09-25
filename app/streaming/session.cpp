@@ -550,7 +550,7 @@ static StreamingPreferences* resolveStreamPreferences(NvComputer* computer, cons
     return StreamLaunchPreferences::resolve(*StreamingPreferences::get(), profile, request);
 }
 
-Session::Session(NvComputer* computer, NvApp& app, const StreamLaunchRequest& request)
+Session::Session(NvComputer* computer, const NvApp& app, const StreamLaunchRequest& request)
     : m_Preferences(resolveStreamPreferences(computer, app, request)),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
       m_Computer(computer),

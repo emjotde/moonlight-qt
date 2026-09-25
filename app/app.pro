@@ -190,6 +190,7 @@ SOURCES += \
     settings/mappingfetcher.cpp \
     settings/streamingpreferences.cpp \
     settings/appstreamingsettings.cpp \
+    settings/externallaunchtrust.cpp \
     streaming/input/abstouch.cpp \
     streaming/input/gamepad.cpp \
     streaming/input/input.cpp \
@@ -234,6 +235,7 @@ HEADERS += \
     cli/startstream.h \
     settings/streamingpreferences.h \
     settings/appstreamingsettings.h \
+    settings/externallaunchtrust.h \
     streaming/input/input.h \
     streaming/input/keyboardrouting.h \
     streaming/session.h \
