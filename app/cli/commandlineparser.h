@@ -15,6 +15,8 @@ public:
         PairRequested,
         ListRequested,
         UriRequested,
+        RegisterUriRequested,
+        UnregisterUriRequested,
     };
 
     GlobalCommandLineParser();

@@ -171,15 +171,30 @@ GlobalCommandLineParser::ParseResult GlobalCommandLineParser::parse(const QStrin
         "\n"
         "Other options:\n"
         "  --uri <URI>     Process a moonlight:// launch URI\n"
+        "  --register-uri  Register moonlight:// for the current user\n"
+        "  --unregister-uri Remove this executable's moonlight:// registration\n"
         "\n"
         "See 'moonlight <action> --help' for help of specific action."
     );
     parser.addPositionalArgument("action", "Action to execute", "<action>");
     parser.addValueOption("uri", "moonlight:// launch URI");
+    parser.addFlagOption("register-uri", "per-user moonlight:// protocol registration");
+    parser.addFlagOption("unregister-uri", "remove this executable's moonlight:// registration");
     if (!parser.parse(args)) {
         parser.showError(parser.errorText());
     }
     auto posArgs = parser.positionalArguments();
+
+    if (parser.isSet("register-uri") || parser.isSet("unregister-uri")) {
+        parser.handleUnknownOptions();
+        if (parser.isSet("register-uri") && parser.isSet("unregister-uri")) {
+            parser.showError("--register-uri and --unregister-uri cannot be combined");
+        }
+        if (parser.isSet("uri") || !posArgs.isEmpty()) {
+            parser.showError("URI registration cannot be combined with another action");
+        }
+        return parser.isSet("register-uri") ? RegisterUriRequested : UnregisterUriRequested;
+    }
 
     if (parser.isSet("uri")) {
         parser.handleUnknownOptions();

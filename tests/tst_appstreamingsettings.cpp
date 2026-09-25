@@ -8,6 +8,7 @@
 #include "streaming/urilaunchrequest.h"
 #include "streaming/urilaunchqueue.h"
 #include "singleinstancerouter.h"
+#include "urischemeregistrar.h"
 
 #include <QtTest>
 #include <QGuiApplication>
@@ -21,7 +22,6 @@
 #include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QUuid>
-#include <future>
 
 static AppStreamingOverride portraitProfile()
 {
@@ -696,6 +696,16 @@ private slots:
         QCOMPARE(parser.getUri(), QString("moonlight://stream?host=h&app=Desktop"));
     }
 
+    void globalParserAcceptsRegistrationOptions()
+    {
+        GlobalCommandLineParser registerParser;
+        QCOMPARE(registerParser.parse({"moonlight", "--register-uri"}),
+                 GlobalCommandLineParser::RegisterUriRequested);
+        GlobalCommandLineParser unregisterParser;
+        QCOMPARE(unregisterParser.parse({"moonlight", "--unregister-uri"}),
+                 GlobalCommandLineParser::UnregisterUriRequested);
+    }
+
     void launchRequestSourcesAreTyped()
     {
         StreamCommandLineParser cliParser;
@@ -818,13 +828,25 @@ private slots:
         SingleInstanceRouter primary(serverName);
         QVERIFY(primary.listen());
         QSignalSpy received(&primary, SIGNAL(messageReceived(QString)));
+        QSignalSpy rejected(&primary, SIGNAL(messageRejected(QString)));
         const QString uri =
             "moonlight://stream?host=host-a&app=Portrait%20Desktop&resolution=2160x3840";
-        auto forwarding = std::async(std::launch::async, [serverName, uri]() {
-            return SingleInstanceRouter::forward(serverName, uri);
-        });
+        QProcess forwarding;
+        forwarding.start(QCoreApplication::applicationFilePath(),
+                         {"--forward-uri-test", serverName, uri});
+        QTRY_VERIFY_WITH_TIMEOUT(received.count() == 1 || rejected.count() == 1 ||
+                                 forwarding.state() == QProcess::NotRunning, 5000);
+        if (received.count() == 0) {
+            qWarning() << "IPC child exit:" << forwarding.exitCode()
+                       << forwarding.readAllStandardError()
+                       << "router rejection:" << rejected;
+        }
         QTRY_COMPARE_WITH_TIMEOUT(received.count(), 1, 5000);
-        QVERIFY(forwarding.get());
+        if (forwarding.state() != QProcess::NotRunning) {
+            QVERIFY(forwarding.waitForFinished(5000));
+        }
+        QCOMPARE(forwarding.exitStatus(), QProcess::NormalExit);
+        QCOMPARE(forwarding.exitCode(), 0);
         QCOMPARE(received.takeFirst().at(0).toString(), uri);
     }
 
@@ -836,6 +858,59 @@ private slots:
         QVERIFY(!name.contains("Test User"));
         QCOMPARE(name, SingleInstanceRouter::nameForSettingsFile(path));
         QVERIFY(name != SingleInstanceRouter::nameForSettingsFile(path + ".other"));
+    }
+
+#ifdef Q_OS_WIN
+    void portableUriRegistrationRoundTrip()
+    {
+        const QString scheme =
+            "moonlight-test-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QString executable = "C:/Program Files/Test Moonlight/Moonlight.exe";
+        QString error;
+        QVERIFY2(UriSchemeRegistrar::registerScheme(executable, error, scheme),
+                 qPrintable(error));
+        const auto registration = UriSchemeRegistrar::readRegistration(error, scheme);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(registration.exists);
+        QVERIFY(registration.urlProtocolValuePresent);
+        QCOMPARE(registration.description, QString("URL:Moonlight Protocol"));
+        QCOMPARE(registration.icon, UriSchemeRegistrar::iconForExecutable(executable));
+        QCOMPARE(registration.command, UriSchemeRegistrar::commandForExecutable(executable));
+        QCOMPARE(registration.command,
+                 QString("\"C:\\Program Files\\Test Moonlight\\Moonlight.exe\" --uri \"%1\""));
+        QVERIFY2(UriSchemeRegistrar::unregisterScheme(executable, error, scheme),
+                 qPrintable(error));
+        QVERIFY(!UriSchemeRegistrar::readRegistration(error, scheme).exists);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+    }
+
+    void portableUnregisterDoesNotRemoveAnotherOwner()
+    {
+        const QString scheme =
+            "moonlight-test-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QString owner = "C:/Portable A/Moonlight.exe";
+        const QString other = "C:/Portable B/Moonlight.exe";
+        QString error;
+        QVERIFY2(UriSchemeRegistrar::registerScheme(owner, error, scheme), qPrintable(error));
+        QVERIFY(!UriSchemeRegistrar::unregisterScheme(other, error, scheme));
+        QVERIFY(error.contains("different application", Qt::CaseInsensitive));
+        error.clear();
+        QCOMPARE(UriSchemeRegistrar::readRegistration(error, scheme).command,
+                 UriSchemeRegistrar::commandForExecutable(owner));
+        QVERIFY2(UriSchemeRegistrar::unregisterScheme(owner, error, scheme), qPrintable(error));
+    }
+#endif
+
+    void installerDeclaresPerUserUriRegistration()
+    {
+        QFile source(QStringLiteral(TEST_PRODUCT_WXS));
+        QVERIFY(source.open(QIODevice::ReadOnly | QIODevice::Text));
+        const QString content = QString::fromUtf8(source.readAll());
+        QVERIFY(content.contains("Root=\"HKCU\""));
+        QVERIFY(content.contains("Software\\Classes\\moonlight"));
+        QVERIFY(content.contains("Name=\"URL Protocol\""));
+        QVERIFY(content.contains("&quot;[#MoonlightExe]&quot; --uri &quot;%1&quot;"));
+        QVERIFY(content.contains("ForceDeleteOnUninstall=\"yes\""));
     }
 
     void oldProfilesInheritDesktopPreferences()
@@ -1071,6 +1146,11 @@ int main(int argc, char* argv[])
                        profile.windowMode == StreamingPreferences::WM_FULLSCREEN_DESKTOP &&
                        profile.captureSysKeysMode == StreamingPreferences::CSK_FULLSCREEN &&
                        profile.preferredDisplay == "portrait-monitor" ? 0 : 1;
+    }
+    if (application.arguments().value(1) == "--forward-uri-test") {
+        return application.arguments().size() == 4 &&
+                       SingleInstanceRouter::forward(application.arguments().at(2),
+                                                     application.arguments().at(3)) ? 0 : 1;
     }
     AppStreamingSettingsTest test;
     return QTest::qExec(&test, argc, argv);

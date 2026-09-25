@@ -48,6 +48,7 @@
 #include "streaming/urilaunchrequest.h"
 #include "streaming/urilaunchmanager.h"
 #include "singleinstancerouter.h"
+#include "urischemeregistrar.h"
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
 
@@ -576,6 +577,34 @@ int main(int argc, char *argv[])
 
     GlobalCommandLineParser parser;
     GlobalCommandLineParser::ParseResult commandLineParserResult = parser.parse(app.arguments());
+    if (commandLineParserResult == GlobalCommandLineParser::RegisterUriRequested ||
+            commandLineParserResult == GlobalCommandLineParser::UnregisterUriRequested) {
+        QString error;
+        const bool success =
+            commandLineParserResult == GlobalCommandLineParser::RegisterUriRequested ?
+                UriSchemeRegistrar::registerScheme(QCoreApplication::applicationFilePath(), error) :
+                UriSchemeRegistrar::unregisterScheme(QCoreApplication::applicationFilePath(), error);
+        if (!success) {
+            qCritical() << error;
+#ifdef Q_OS_WIN32
+            MessageBoxW(nullptr, reinterpret_cast<const wchar_t*>(error.utf16()),
+                        L"Moonlight", MB_OK | MB_ICONERROR | MB_TOPMOST);
+#endif
+            return 1;
+        }
+        qInfo() << (commandLineParserResult == GlobalCommandLineParser::RegisterUriRequested ?
+                        "Registered moonlight:// for the current user" :
+                        "Removed moonlight:// registration for the current executable");
+#ifdef Q_OS_WIN32
+        const QString message =
+            commandLineParserResult == GlobalCommandLineParser::RegisterUriRequested ?
+                QObject::tr("Moonlight links are now registered for the current user.") :
+                QObject::tr("This executable's Moonlight link registration was removed.");
+        MessageBoxW(nullptr, reinterpret_cast<const wchar_t*>(message.utf16()),
+                    L"Moonlight", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
+#endif
+        return 0;
+    }
     QSettings instanceSettings;
     const QString instanceServerName =
         SingleInstanceRouter::nameForSettingsFile(instanceSettings.fileName());
@@ -767,6 +796,9 @@ int main(int argc, char *argv[])
     case GlobalCommandLineParser::UriRequested:
         initialView = "qrc:/gui/PcView.qml";
         break;
+    case GlobalCommandLineParser::RegisterUriRequested:
+    case GlobalCommandLineParser::UnregisterUriRequested:
+        Q_UNREACHABLE();
     case GlobalCommandLineParser::QuitRequested:
         {
             initialView = "qrc:/gui/CliQuitStreamSegue.qml";

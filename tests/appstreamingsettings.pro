@@ -6,6 +6,7 @@ TEMPLATE = app
 
 INCLUDEPATH += ../app
 DEFINES += TEST_GUI_DIR=\\\"$$PWD/../app/gui\\\"
+DEFINES += TEST_PRODUCT_WXS=\\\"$$PWD/../wix/Moonlight/Product.wxs\\\"
 
 SOURCES += \
     tst_appstreamingsettings.cpp \
@@ -17,6 +18,7 @@ SOURCES += \
     ../app/streaming/urilaunchrequest.cpp \
     ../app/streaming/urilaunchqueue.cpp \
     ../app/singleinstancerouter.cpp \
+    ../app/urischemeregistrar.cpp \
     ../app/backend/streamdisplays.cpp \
     ../app/wm.cpp
 
@@ -31,13 +33,14 @@ HEADERS += ../app/backend/streamdisplays.h \
 HEADERS += ../app/streaming/urilaunchrequest.h
 HEADERS += ../app/streaming/urilaunchqueue.h \
     ../app/singleinstancerouter.h
+HEADERS += ../app/urischemeregistrar.h
 
 win32 {
     INCLUDEPATH += ../libs/windows/include
     contains(QT_ARCH, x86_64): INCLUDEPATH += ../libs/windows/include/x64
     contains(QT_ARCH, arm64): INCLUDEPATH += ../libs/windows/include/arm64
     contains(QT_ARCH, i386): INCLUDEPATH += ../libs/windows/include/x86
-    LIBS += user32.lib
+    LIBS += user32.lib advapi32.lib
     DEFINES += _USE_MATH_DEFINES
 }
 unix:!macx {
