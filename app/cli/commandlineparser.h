@@ -14,6 +14,7 @@ public:
         QuitRequested,
         PairRequested,
         ListRequested,
+        UriRequested,
     };
 
     GlobalCommandLineParser();
@@ -21,6 +22,10 @@ public:
 
     ParseResult parse(const QStringList &args);
 
+    QString getUri() const;
+
+private:
+    QString m_Uri;
 };
 
 class QuitCommandLineParser

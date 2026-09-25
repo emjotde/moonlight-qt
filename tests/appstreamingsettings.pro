@@ -13,6 +13,7 @@ SOURCES += \
     ../app/settings/streamingpreferences.cpp \
     ../app/cli/commandlineparser.cpp \
     ../app/streaming/streamlaunchrequest.cpp \
+    ../app/streaming/urilaunchrequest.cpp \
     ../app/backend/streamdisplays.cpp \
     ../app/wm.cpp
 
@@ -23,6 +24,7 @@ HEADERS += \
 HEADERS += ../app/backend/streamdisplays.h \
     ../app/streaming/input/keyboardrouting.h \
     ../app/streaming/streamlaunchrequest.h
+HEADERS += ../app/streaming/urilaunchrequest.h
 
 win32 {
     INCLUDEPATH += ../libs/windows/include

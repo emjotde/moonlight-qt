@@ -2,10 +2,13 @@
 #include "settings/streamingpreferences.h"
 #include "cli/commandlineparser.h"
 #include "backend/streamdisplays.h"
+#include "backend/nvapp.h"
 #include "streaming/input/keyboardrouting.h"
+#include "streaming/urilaunchrequest.h"
 
 #include <QtTest>
 #include <QGuiApplication>
+#include <QFile>
 #include <QMetaProperty>
 #include <QProcess>
 #include <QQmlComponent>
@@ -107,10 +110,14 @@ private slots:
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_SettingsDir.path());
         QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, m_SettingsDir.path());
+        QSettings settings;
+        m_SettingsFile = settings.fileName();
     }
 
     void init()
     {
+        QVERIFY(QFile::remove(m_SettingsFile) || !QFile::exists(m_SettingsFile));
+        QVERIFY(QFile::remove(m_SettingsFile + ".lock") || !QFile::exists(m_SettingsFile + ".lock"));
         QSettings settings;
         settings.clear();
         settings.setValue("width", 1920);
@@ -479,6 +486,210 @@ private slots:
         QCOMPARE(global->videoCodecConfig, StreamingPreferences::VCC_AUTO);
     }
 
+    void validLandscapeUri()
+    {
+        const auto result = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=Landscape%20Desktop&resolution=3840x2160"
+            "&fps=60&displayMode=fullscreen",
+            *StreamingPreferences::get());
+        QVERIFY2(result.isValid(), qPrintable(result.error));
+        QCOMPARE(result.request.host, QString("host-a"));
+        QCOMPARE(result.request.appName, QString("Landscape Desktop"));
+        const auto values = result.request.uriOverrides.values();
+        QCOMPARE(values->width, 3840);
+        QCOMPARE(values->height, 2160);
+        QCOMPARE(values->fps, 60);
+        QCOMPARE(values->windowMode, StreamingPreferences::WM_FULLSCREEN);
+    }
+
+    void validPortraitUri()
+    {
+        const auto result = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=Portrait%20Desktop&resolution=2160x3840"
+            "&fps=60&bitrate=80000&displayMode=borderless&codec=HEVC"
+            "&audioConfig=7.1-surround&quitAfter=false",
+            *StreamingPreferences::get());
+        QVERIFY2(result.isValid(), qPrintable(result.error));
+        const auto values = result.request.uriOverrides.values();
+        QCOMPARE(values->width, 2160);
+        QCOMPARE(values->height, 3840);
+        QCOMPARE(values->fps, 60);
+        QCOMPARE(values->bitrateKbps, 80000);
+        QCOMPARE(values->windowMode, StreamingPreferences::WM_FULLSCREEN_DESKTOP);
+        QCOMPARE(values->videoCodecConfig, StreamingPreferences::VCC_FORCE_HEVC);
+        QCOMPARE(values->audioConfig, StreamingPreferences::AC_71_SURROUND);
+        QVERIFY(!values->quitAppAfter);
+    }
+
+    void percentDecodingHappensOnce()
+    {
+        const auto decoded = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=My%20Desktop%20%E2%98%83",
+            *StreamingPreferences::get());
+        QVERIFY2(decoded.isValid(), qPrintable(decoded.error));
+        QCOMPARE(decoded.request.appName, QString::fromUtf8("My Desktop \xE2\x98\x83"));
+
+        const auto once = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=My%2520Desktop",
+            *StreamingPreferences::get());
+        QVERIFY2(once.isValid(), qPrintable(once.error));
+        QCOMPARE(once.request.appName, QString("My%20Desktop"));
+    }
+
+    void appIdPrecedesNameThenFallsBack()
+    {
+        const auto result = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=Wrong%20Name&appId=42",
+            *StreamingPreferences::get());
+        QVERIFY2(result.isValid(), qPrintable(result.error));
+        QVector<NvApp> apps;
+        NvApp nameMatch;
+        nameMatch.id = 41;
+        nameMatch.name = "Wrong Name";
+        apps.append(nameMatch);
+        NvApp idMatch;
+        idMatch.id = 42;
+        idMatch.name = "Correct by ID";
+        apps.append(idMatch);
+        QCOMPARE(result.request.findAppIndex(apps), 1);
+
+        apps.removeLast();
+        QCOMPARE(result.request.findAppIndex(apps), 0);
+    }
+
+    void uriOverridesCliAndProfile()
+    {
+        auto global = StreamingPreferences::get();
+        global->width = 1280;
+        global->height = 720;
+        global->fps = 30;
+        global->bitrateKbps = 10000;
+
+        StreamCommandLineParser cliParser;
+        auto request = cliParser.parse(
+            {"moonlight", "stream", "host-a", "Desktop",
+             "--resolution", "1920x1080", "--fps", "90", "--bitrate", "30000"},
+            *global);
+        const auto uri = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=Desktop&resolution=2160x3840"
+            "&fps=60&bitrate=80000",
+            *global);
+        QVERIFY2(uri.isValid(), qPrintable(uri.error));
+        request.uriOverrides = uri.request.uriOverrides;
+        auto profile = portraitProfile();
+        profile.width = 3840;
+        profile.height = 2160;
+        profile.fps = 120;
+        profile.bitrateKbps = 65000;
+
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, profile, request));
+        QCOMPARE(effective->width, 2160);
+        QCOMPARE(effective->height, 3840);
+        QCOMPARE(effective->fps, 60);
+        QCOMPARE(effective->bitrateKbps, 80000);
+        QCOMPARE(global->width, 1280);
+        QCOMPARE(global->height, 720);
+    }
+
+    void uriMissingOptionalValuesUsesProfileAndGlobal()
+    {
+        auto global = StreamingPreferences::get();
+        global->bitrateKbps = 17000;
+        global->videoCodecConfig = StreamingPreferences::VCC_FORCE_AV1;
+        const auto uri = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=host-a&app=Desktop&fps=90",
+            *global);
+        QVERIFY2(uri.isValid(), qPrintable(uri.error));
+        auto profile = portraitProfile();
+        profile.bitrateKbps = 0;
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, profile, uri.request));
+        QCOMPARE(effective->width, 2160);
+        QCOMPARE(effective->height, 3840);
+        QCOMPARE(effective->fps, 90);
+        QCOMPARE(effective->bitrateKbps, 17000);
+        QCOMPARE(effective->videoCodecConfig, StreamingPreferences::VCC_FORCE_AV1);
+    }
+
+    void invalidUris_data()
+    {
+        QTest::addColumn<QString>("uri");
+        QTest::addColumn<QString>("errorFragment");
+        QTest::newRow("invalid-resolution-format")
+            << "moonlight://stream?host=h&app=a&resolution=3840-2160" << "WIDTHxHEIGHT";
+        QTest::newRow("invalid-resolution-range")
+            << "moonlight://stream?host=h&app=a&resolution=200x2160" << "between 256 and 8192";
+        QTest::newRow("fps-low")
+            << "moonlight://stream?host=h&app=a&fps=9" << "between 10 and 480";
+        QTest::newRow("fps-high")
+            << "moonlight://stream?host=h&app=a&fps=481" << "between 10 and 480";
+        QTest::newRow("bitrate-low")
+            << "moonlight://stream?host=h&app=a&bitrate=499" << "between 500 and 500000";
+        QTest::newRow("bitrate-high")
+            << "moonlight://stream?host=h&app=a&bitrate=500001" << "between 500 and 500000";
+        QTest::newRow("display-mode")
+            << "moonlight://stream?host=h&app=a&displayMode=maximized" << "displayMode";
+        QTest::newRow("codec")
+            << "moonlight://stream?host=h&app=a&codec=VP9" << "codec";
+        QTest::newRow("audio")
+            << "moonlight://stream?host=h&app=a&audioConfig=quad" << "audioConfig";
+        QTest::newRow("boolean")
+            << "moonlight://stream?host=h&app=a&quitAfter=1" << "true or false";
+        QTest::newRow("duplicate")
+            << "moonlight://stream?host=h&host=h2&app=a" << "Duplicate";
+        QTest::newRow("malformed-percent")
+            << "moonlight://stream?host=h&app=Bad%2Name" << "percent";
+        QTest::newRow("unknown-action")
+            << "moonlight://quit?host=h&app=a" << "Unknown";
+        QTest::newRow("unknown-parameter")
+            << "moonlight://stream?host=h&app=a&shell=cmd" << "Unknown URI parameter";
+        QTest::newRow("missing-host")
+            << "moonlight://stream?app=a" << "host";
+        QTest::newRow("missing-app")
+            << "moonlight://stream?host=h" << "app or appId";
+        QTest::newRow("invalid-app-id")
+            << "moonlight://stream?host=h&appId=-1" << "application ID";
+        QTest::newRow("fragment")
+            << "moonlight://stream?host=h&app=a#fragment" << "fragments";
+        QTest::newRow("empty-pair")
+            << "moonlight://stream?host=h&app=a&" << "empty query";
+    }
+
+    void invalidUris()
+    {
+        QFETCH(QString, uri);
+        QFETCH(QString, errorFragment);
+        const auto result = UriLaunchRequestParser::parse(uri, *StreamingPreferences::get());
+        QVERIFY(!result.isValid());
+        QVERIFY2(result.error.contains(errorFragment, Qt::CaseInsensitive),
+                 qPrintable(result.error));
+    }
+
+    void embeddedNulIsRejected()
+    {
+        QString uri = "moonlight://stream?host=h&app=Desktop";
+        uri.append(QChar('\0'));
+        const auto result = UriLaunchRequestParser::parse(uri, *StreamingPreferences::get());
+        QVERIFY(!result.isValid());
+        QVERIFY(result.error.contains("control", Qt::CaseInsensitive));
+
+        const auto encoded = UriLaunchRequestParser::parse(
+            "moonlight://stream?host=h&app=Desktop%00Hidden",
+            *StreamingPreferences::get());
+        QVERIFY(!encoded.isValid());
+        QVERIFY(encoded.error.contains("control", Qt::CaseInsensitive));
+    }
+
+    void globalParserAcceptsUriOption()
+    {
+        GlobalCommandLineParser parser;
+        QCOMPARE(parser.parse({"moonlight", "--uri",
+                               "moonlight://stream?host=h&app=Desktop"}),
+                 GlobalCommandLineParser::UriRequested);
+        QCOMPARE(parser.getUri(), QString("moonlight://stream?host=h&app=Desktop"));
+    }
+
     void oldProfilesInheritDesktopPreferences()
     {
         QSettings settings;
@@ -696,6 +907,7 @@ private slots:
 
 private:
     QTemporaryDir m_SettingsDir;
+    QString m_SettingsFile;
 };
 
 int main(int argc, char* argv[])

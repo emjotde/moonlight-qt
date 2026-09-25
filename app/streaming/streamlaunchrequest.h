@@ -5,6 +5,9 @@
 
 #include <QSharedPointer>
 #include <QString>
+#include <QVector>
+
+class NvApp;
 
 class StreamLaunchOverrides
 {
@@ -72,6 +75,8 @@ struct StreamLaunchRequest
     StreamLaunchOverrides uriOverrides;
 
     bool hasAppId() const { return appId > 0; }
+    int findAppIndex(const QVector<NvApp>& apps) const;
+    QString appDescription() const;
 };
 
 class StreamLaunchPreferences

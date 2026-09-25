@@ -134,7 +134,7 @@ public:
             }
             if (m_State == StateSeekApp) {
                 m_State = StateFailure;
-                emit q->failed(QObject::tr("Failed to find application %1").arg(m_Request.appName));
+                emit q->failed(QObject::tr("Failed to find %1").arg(m_Request.appDescription()));
             }
             break;
         }
@@ -142,12 +142,7 @@ public:
 
     int getAppIndex() const
     {
-        for (int i = 0; i < m_Computer->appList.length(); i++) {
-            if (m_Computer->appList[i].name.toLower() == m_Request.appName.toLower()) {
-                return i;
-            }
-        }
-        return -1;
+        return m_Request.findAppIndex(m_Computer->appList);
     }
 
     bool isNotStreaming() const

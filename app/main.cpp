@@ -45,6 +45,7 @@
 #include "backend/computermanager.h"
 #include "backend/systemproperties.h"
 #include "streaming/session.h"
+#include "streaming/urilaunchrequest.h"
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
 
@@ -736,6 +737,21 @@ int main(int argc, char *argv[])
                 streamParser.parse(app.arguments(), *StreamingPreferences::get());
             auto launcher = new CliStartStream::Launcher(request, &app);
             engine.rootContext()->setContextProperty("launcher", launcher);
+            break;
+        }
+    case GlobalCommandLineParser::UriRequested:
+        {
+            const auto uriResult =
+                UriLaunchRequestParser::parse(parser.getUri(), *StreamingPreferences::get());
+            if (!uriResult.isValid()) {
+                initialView = "qrc:/gui/UriLaunchError.qml";
+                engine.rootContext()->setContextProperty("uriLaunchError", uriResult.error);
+            }
+            else {
+                initialView = "qrc:/gui/CliStartStreamSegue.qml";
+                auto launcher = new CliStartStream::Launcher(uriResult.request, &app);
+                engine.rootContext()->setContextProperty("launcher", launcher);
+            }
             break;
         }
     case GlobalCommandLineParser::QuitRequested:

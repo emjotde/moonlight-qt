@@ -169,11 +169,29 @@ GlobalCommandLineParser::ParseResult GlobalCommandLineParser::parse(const QStrin
         "  stream          Start streaming an app\n"
         "  pair            Pair a new host\n"
         "\n"
+        "Other options:\n"
+        "  --uri <URI>     Process a moonlight:// launch URI\n"
+        "\n"
         "See 'moonlight <action> --help' for help of specific action."
     );
     parser.addPositionalArgument("action", "Action to execute", "<action>");
-    parser.parse(args);
+    parser.addValueOption("uri", "moonlight:// launch URI");
+    if (!parser.parse(args)) {
+        parser.showError(parser.errorText());
+    }
     auto posArgs = parser.positionalArguments();
+
+    if (parser.isSet("uri")) {
+        parser.handleUnknownOptions();
+        if (parser.values("uri").size() != 1) {
+            parser.showError("--uri may only be specified once");
+        }
+        if (!posArgs.isEmpty()) {
+            parser.showError("--uri cannot be combined with another action");
+        }
+        m_Uri = parser.value("uri");
+        return UriRequested;
+    }
 
     if (posArgs.isEmpty()) {
         // This method will not return and terminates the process if --version
@@ -204,6 +222,11 @@ GlobalCommandLineParser::ParseResult GlobalCommandLineParser::parse(const QStrin
 
         parser.showError(QString("Invalid action"));
     }
+}
+
+QString GlobalCommandLineParser::getUri() const
+{
+    return m_Uri;
 }
 
 QuitCommandLineParser::QuitCommandLineParser()

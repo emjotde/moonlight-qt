@@ -1,4 +1,5 @@
 #include "streamlaunchrequest.h"
+#include "backend/nvapp.h"
 
 #include <QtDebug>
 
@@ -194,4 +195,34 @@ StreamingPreferences* StreamLaunchPreferences::resolve(const StreamingPreference
     request.cliOverrides.applyTo(*effective, !profile.enabled);
     request.uriOverrides.applyTo(*effective);
     return effective;
+}
+
+int StreamLaunchRequest::findAppIndex(const QVector<NvApp>& apps) const
+{
+    if (hasAppId()) {
+        for (int i = 0; i < apps.size(); ++i) {
+            if (apps[i].id == appId) {
+                return i;
+            }
+        }
+    }
+    if (!appName.isEmpty()) {
+        for (int i = 0; i < apps.size(); ++i) {
+            if (apps[i].name.compare(appName, Qt::CaseInsensitive) == 0) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+QString StreamLaunchRequest::appDescription() const
+{
+    if (hasAppId() && !appName.isEmpty()) {
+        return QObject::tr("%1 (application ID %2)").arg(appName).arg(appId);
+    }
+    if (hasAppId()) {
+        return QObject::tr("application ID %1").arg(appId);
+    }
+    return appName;
 }
