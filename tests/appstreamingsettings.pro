@@ -1,4 +1,4 @@
-QT += core testlib quick quickcontrols2
+QT += core network testlib quick quickcontrols2
 CONFIG += console testcase c++11
 CONFIG -= app_bundle
 TARGET = tst_appstreamingsettings
@@ -15,6 +15,8 @@ SOURCES += \
     ../app/cli/commandlineparser.cpp \
     ../app/streaming/streamlaunchrequest.cpp \
     ../app/streaming/urilaunchrequest.cpp \
+    ../app/streaming/urilaunchqueue.cpp \
+    ../app/singleinstancerouter.cpp \
     ../app/backend/streamdisplays.cpp \
     ../app/wm.cpp
 
@@ -27,6 +29,8 @@ HEADERS += ../app/backend/streamdisplays.h \
     ../app/streaming/input/keyboardrouting.h \
     ../app/streaming/streamlaunchrequest.h
 HEADERS += ../app/streaming/urilaunchrequest.h
+HEADERS += ../app/streaming/urilaunchqueue.h \
+    ../app/singleinstancerouter.h
 
 win32 {
     INCLUDEPATH += ../libs/windows/include

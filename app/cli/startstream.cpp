@@ -153,11 +153,14 @@ public:
 
         const NvApp app = m_Computer->appList[index];
         m_TimeoutTimer->stop();
-        if (m_Computer->currentGameId != 0 && m_Computer->currentGameId != app.id) {
+        if (m_Computer->currentGameId != 0) {
             if (m_Request.source == StreamLaunchRequest::UriSource) {
-                fail(QObject::tr("A different application is already active on %1. "
-                                 "End that stream before opening this link.")
+                fail(QObject::tr("A stream is already active on %1. "
+                                 "End it before opening this link.")
                          .arg(m_Computer->name));
+            }
+            else if (m_Computer->currentGameId == app.id) {
+                prepareLaunch(app);
             }
             else {
                 m_PendingApp = app;
@@ -350,6 +353,12 @@ bool Launcher::isExecuted() const
 {
     Q_D(const Launcher);
     return d->m_State != StateInit;
+}
+
+bool Launcher::isExternalRequest() const
+{
+    Q_D(const Launcher);
+    return d->m_Request.source == StreamLaunchRequest::UriSource;
 }
 
 void Launcher::onComputerFound(NvComputer *computer)

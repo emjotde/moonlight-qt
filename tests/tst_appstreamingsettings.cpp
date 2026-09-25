@@ -6,6 +6,8 @@
 #include "backend/nvapp.h"
 #include "streaming/input/keyboardrouting.h"
 #include "streaming/urilaunchrequest.h"
+#include "streaming/urilaunchqueue.h"
+#include "singleinstancerouter.h"
 
 #include <QtTest>
 #include <QGuiApplication>
@@ -18,6 +20,8 @@
 #include <QQuickItem>
 #include <QTemporaryDir>
 #include <QSignalSpy>
+#include <QUuid>
+#include <future>
 
 static AppStreamingOverride portraitProfile()
 {
@@ -786,6 +790,52 @@ private slots:
         QTRY_VERIFY(dialog->property("opened").toBool());
         QVERIFY(QMetaObject::invokeMethod(dialog, "reject"));
         QCOMPARE(cancelled.count(), 1);
+    }
+
+    void uriQueueWaitsForStartupAndRejectsDuplicates()
+    {
+        UriLaunchQueue queue;
+        const QString first = "moonlight://stream?host=host-a&app=Desktop";
+        const QString second = "moonlight://stream?host=host-b&app=Desktop";
+        QVERIFY(queue.enqueue(first));
+        QVERIFY(!queue.enqueue(first));
+        QVERIFY(queue.enqueue(second));
+        QCOMPARE(queue.pendingCount(), 2);
+        QVERIFY(!queue.hasReadyRequest());
+        QVERIFY(queue.takeNext().isEmpty());
+
+        queue.setReady();
+        QVERIFY(queue.hasReadyRequest());
+        QCOMPARE(queue.takeNext(), first);
+        QCOMPARE(queue.takeNext(), second);
+        QVERIFY(!queue.hasReadyRequest());
+    }
+
+    void singleInstanceForwardsCompleteUri()
+    {
+        const QString serverName =
+            "MoonlightUriTest-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        SingleInstanceRouter primary(serverName);
+        QVERIFY(primary.listen());
+        QSignalSpy received(&primary, SIGNAL(messageReceived(QString)));
+        const QString uri =
+            "moonlight://stream?host=host-a&app=Portrait%20Desktop&resolution=2160x3840";
+        auto forwarding = std::async(std::launch::async, [serverName, uri]() {
+            return SingleInstanceRouter::forward(serverName, uri);
+        });
+        QTRY_COMPARE_WITH_TIMEOUT(received.count(), 1, 5000);
+        QVERIFY(forwarding.get());
+        QCOMPARE(received.takeFirst().at(0).toString(), uri);
+    }
+
+    void singleInstanceNameDoesNotExposeSettingsPath()
+    {
+        const QString path = "C:/Users/Test User/AppData/Roaming/Moonlight/settings.ini";
+        const QString name = SingleInstanceRouter::nameForSettingsFile(path);
+        QVERIFY(name.startsWith("MoonlightQt-"));
+        QVERIFY(!name.contains("Test User"));
+        QCOMPARE(name, SingleInstanceRouter::nameForSettingsFile(path));
+        QVERIFY(name != SingleInstanceRouter::nameForSettingsFile(path + ".other"));
     }
 
     void oldProfilesInheritDesktopPreferences()

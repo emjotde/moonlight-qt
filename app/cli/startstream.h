@@ -26,6 +26,7 @@ public:
     Q_INVOKABLE void approveExternalLaunch(bool alwaysAllow);
     Q_INVOKABLE void cancelExternalLaunch();
     Q_INVOKABLE bool isExecuted() const;
+    Q_INVOKABLE bool isExternalRequest() const;
 
 signals:
     void searchingComputer();

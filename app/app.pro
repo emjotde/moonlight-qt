@@ -174,6 +174,7 @@ SOURCES += \
     backend/nvapp.cpp \
     cli/pair.cpp \
     main.cpp \
+    singleinstancerouter.cpp \
     backend/computerseeker.cpp \
     backend/identitymanager.cpp \
     backend/nvcomputer.cpp \
@@ -200,6 +201,8 @@ SOURCES += \
     streaming/session.cpp \
     streaming/streamlaunchrequest.cpp \
     streaming/urilaunchrequest.cpp \
+    streaming/urilaunchmanager.cpp \
+    streaming/urilaunchqueue.cpp \
     streaming/audio/audio.cpp \
     streaming/audio/renderers/sdlaud.cpp \
     gui/computermodel.cpp \
@@ -241,6 +244,8 @@ HEADERS += \
     streaming/session.h \
     streaming/streamlaunchrequest.h \
     streaming/urilaunchrequest.h \
+    streaming/urilaunchmanager.h \
+    streaming/urilaunchqueue.h \
     streaming/audio/renderers/renderer.h \
     streaming/audio/renderers/sdl.h \
     gui/computermodel.h \
@@ -249,6 +254,7 @@ HEADERS += \
     streaming/streamutils.h \
     backend/autoupdatechecker.h \
     path.h \
+    singleinstancerouter.h \
     settings/mappingmanager.h \
     gui/sdlgamepadkeynavigation.h \
     streaming/video/overlaymanager.h \

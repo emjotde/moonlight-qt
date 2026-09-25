@@ -5,6 +5,18 @@ import ComputerManager 1.0
 import SdlGamepadKeyNavigation 1.0
 
 Item {
+    property var requestLauncher: null
+    readonly property var activeLauncher: requestLauncher ? requestLauncher : (typeof launcher !== "undefined" ? launcher : null)
+    property bool sessionStarted: false
+
+    function finishExternalLaunch() {
+        if (activeLauncher && activeLauncher.isExternalRequest()) {
+            stackView.pop();
+        } else {
+            Qt.quit();
+        }
+    }
+
     function onSearchingComputer() {
         stageLabel.text = qsTr("Establishing connection to PC...");
     }
@@ -14,11 +26,12 @@ Item {
     }
 
     function onSessionCreated(appName, session) {
+        sessionStarted = true;
         var component = Qt.createComponent("StreamSegue.qml");
         var segue = component.createObject(stackView, {
             "appName": appName,
             "session": session,
-            "quitAfter": true
+            "quitAfter": !activeLauncher.isExternalRequest()
         });
         stackView.push(segue);
     }
@@ -50,27 +63,37 @@ Item {
     }
 
     function onExternalLaunchCancelled() {
-        Qt.quit();
+        finishExternalLaunch();
     }
 
     StackView.onActivated: {
-        if (!launcher.isExecuted()) {
+        if (sessionStarted && activeLauncher.isExternalRequest()) {
+            stackView.pop();
+            return;
+        }
+        if (!activeLauncher.isExecuted()) {
             toolBar.visible = false;
 
             // Normally this is enabled by PcView, but we will won't
             // load PcView when streaming from the command-line.
             SdlGamepadKeyNavigation.enable();
 
-            launcher.searchingComputer.connect(onSearchingComputer);
-            launcher.searchingApp.connect(onSearchingApp);
-            launcher.sessionCreated.connect(onSessionCreated);
-            launcher.failed.connect(onLaunchFailed);
-            launcher.appQuitRequired.connect(onAppQuitRequired);
-            launcher.pairingRequired.connect(onPairingRequired);
-            launcher.pairingFinished.connect(onPairingFinished);
-            launcher.externalLaunchConfirmationRequired.connect(onExternalLaunchConfirmationRequired);
-            launcher.externalLaunchCancelled.connect(onExternalLaunchCancelled);
-            launcher.execute(ComputerManager);
+            activeLauncher.searchingComputer.connect(onSearchingComputer);
+            activeLauncher.searchingApp.connect(onSearchingApp);
+            activeLauncher.sessionCreated.connect(onSessionCreated);
+            activeLauncher.failed.connect(onLaunchFailed);
+            activeLauncher.appQuitRequired.connect(onAppQuitRequired);
+            activeLauncher.pairingRequired.connect(onPairingRequired);
+            activeLauncher.pairingFinished.connect(onPairingFinished);
+            activeLauncher.externalLaunchConfirmationRequired.connect(onExternalLaunchConfirmationRequired);
+            activeLauncher.externalLaunchCancelled.connect(onExternalLaunchCancelled);
+            activeLauncher.execute(ComputerManager);
+        }
+    }
+
+    Component.onDestruction: {
+        if (requestLauncher) {
+            uriLaunchManager.releaseLauncher(requestLauncher);
         }
     }
 
@@ -87,52 +110,46 @@ Item {
             height: stageSpinner.height
             font.pointSize: 20
             verticalAlignment: Text.AlignVCenter
-
             wrapMode: Text.Wrap
         }
     }
 
     ErrorMessageDialog {
         id: errorDialog
-
-        onClosed: {
-            Qt.quit();
-        }
+        onClosed: finishExternalLaunch()
     }
 
     PairingDialog {
         id: pairingDialog
-        onRejected: Qt.quit()
+        onRejected: finishExternalLaunch()
     }
 
     ExternalLaunchDialog {
         id: externalLaunchDialog
-        onLaunchOnce: launcher.approveExternalLaunch(false)
-        onAlwaysAllow: launcher.approveExternalLaunch(true)
-        onCancelled: {
-            launcher.cancelExternalLaunch();
-            Qt.quit();
-        }
+        onLaunchOnce: activeLauncher.approveExternalLaunch(false)
+        onAlwaysAllow: activeLauncher.approveExternalLaunch(true)
+        onCancelled: activeLauncher.cancelExternalLaunch()
     }
 
     NavigableMessageDialog {
         id: quitAppDialog
+        property string appName: ""
+
         text: qsTr("Are you sure you want to quit %1? Any unsaved progress will be lost.").arg(appName)
         standardButtons: Dialog.Yes | Dialog.No
-        property string appName: ""
 
         function quitApp() {
             var component = Qt.createComponent("QuitSegue.qml");
             var params = {
                 "appName": appName,
                 "quitRunningAppFn": function () {
-                    launcher.quitRunningApp();
+                    activeLauncher.quitRunningApp();
                 }
             };
             stackView.push(component.createObject(stackView, params));
         }
 
         onAccepted: quitApp()
-        onRejected: Qt.quit()
+        onRejected: finishExternalLaunch()
     }
 }

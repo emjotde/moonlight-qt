@@ -46,6 +46,8 @@
 #include "backend/systemproperties.h"
 #include "streaming/session.h"
 #include "streaming/urilaunchrequest.h"
+#include "streaming/urilaunchmanager.h"
+#include "singleinstancerouter.h"
 #include "settings/streamingpreferences.h"
 #include "gui/sdlgamepadkeynavigation.h"
 
@@ -574,6 +576,28 @@ int main(int argc, char *argv[])
 
     GlobalCommandLineParser parser;
     GlobalCommandLineParser::ParseResult commandLineParserResult = parser.parse(app.arguments());
+    QSettings instanceSettings;
+    const QString instanceServerName =
+        SingleInstanceRouter::nameForSettingsFile(instanceSettings.fileName());
+    if (commandLineParserResult == GlobalCommandLineParser::UriRequested &&
+            SingleInstanceRouter::forward(instanceServerName, parser.getUri())) {
+        return 0;
+    }
+    SingleInstanceRouter instanceRouter(instanceServerName, &app);
+    const bool instanceServerActive = instanceRouter.listen();
+    if (commandLineParserResult == GlobalCommandLineParser::UriRequested &&
+            !instanceServerActive &&
+            SingleInstanceRouter::forward(instanceServerName, parser.getUri())) {
+        return 0;
+    }
+    UriLaunchManager uriLaunchManager(StreamingPreferences::get(), &app);
+    QObject::connect(&instanceRouter, &SingleInstanceRouter::messageReceived,
+                     &uriLaunchManager, &UriLaunchManager::enqueue);
+    QObject::connect(&instanceRouter, &SingleInstanceRouter::messageRejected,
+                     &uriLaunchManager, &UriLaunchManager::rejectMessage);
+    if (commandLineParserResult == GlobalCommandLineParser::UriRequested) {
+        uriLaunchManager.enqueue(parser.getUri());
+    }
     switch (commandLineParserResult) {
     case GlobalCommandLineParser::ListRequested:
         // Don't log to the console since it will jumble the command output
@@ -722,6 +746,7 @@ int main(int argc, char *argv[])
     }
 
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("uriLaunchManager", &uriLaunchManager);
     QString initialView;
     bool hasGUI = true;
 
@@ -740,20 +765,8 @@ int main(int argc, char *argv[])
             break;
         }
     case GlobalCommandLineParser::UriRequested:
-        {
-            const auto uriResult =
-                UriLaunchRequestParser::parse(parser.getUri(), *StreamingPreferences::get());
-            if (!uriResult.isValid()) {
-                initialView = "qrc:/gui/UriLaunchError.qml";
-                engine.rootContext()->setContextProperty("uriLaunchError", uriResult.error);
-            }
-            else {
-                initialView = "qrc:/gui/CliStartStreamSegue.qml";
-                auto launcher = new CliStartStream::Launcher(uriResult.request, &app);
-                engine.rootContext()->setContextProperty("launcher", launcher);
-            }
-            break;
-        }
+        initialView = "qrc:/gui/PcView.qml";
+        break;
     case GlobalCommandLineParser::QuitRequested:
         {
             initialView = "qrc:/gui/CliQuitStreamSegue.qml";
