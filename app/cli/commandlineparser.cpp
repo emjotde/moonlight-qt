@@ -334,8 +334,13 @@ StreamCommandLineParser::~StreamCommandLineParser()
 {
 }
 
-void StreamCommandLineParser::parse(const QStringList &args, StreamingPreferences *preferences)
+StreamLaunchRequest StreamCommandLineParser::parse(const QStringList &args,
+                                                   const StreamingPreferences& globalPreferences)
 {
+    StreamLaunchRequest request;
+    request.cliOverrides = StreamLaunchOverrides(globalPreferences);
+    auto preferences = request.cliOverrides.values();
+
     CommandLineParser parser;
     parser.setupCommonOptions();
     parser.setApplicationDescription(
@@ -386,11 +391,6 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.handleUnknownOptions();
 
     // Resolve display's width and height
-    m_ExplicitOptions.clear();
-    for (const QString& option : parser.optionNames()) {
-        m_ExplicitOptions.insert(option);
-    }
-
     QRegularExpression resolutionRexExp("^(720|1080|1440|4K|resolution)$");
     QStringList resoOptions = parser.optionNames().filter(resolutionRexExp);
     bool displaySet = !resoOptions.isEmpty();
@@ -413,6 +413,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
             preferences->width  = resolution.first;
             preferences->height = resolution.second;
         }
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::Resolution);
     }
 
     // Resolve --fps option
@@ -421,6 +422,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
         if (!inRange(preferences->fps, 10, 480)) {
             fprintf(stderr, "Warning: FPS is out of the supported range (10 - 480 FPS). Performance may suffer!\n");
         }
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::Fps);
     }
 
     // Resolve --bitrate option
@@ -429,9 +431,11 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
         if (!inRange(preferences->bitrateKbps, 500, 500000)) {
             fprintf(stderr, "Warning: Bitrate is out of the supported range (500 - 500000 Kbps). Performance may suffer!\n");
         }
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::Bitrate);
     } else if (displaySet || parser.isSet("fps")) {
         preferences->bitrateKbps = preferences->getDefaultBitrate(
             preferences->width, preferences->height, preferences->fps, preferences->enableYUV444);
+        request.cliOverrides.markDerived(StreamLaunchOverrides::Bitrate);
     }
 
     // Resolve --packet-size option
@@ -440,82 +444,139 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
         if (preferences->packetSize < 1024) {
             parser.showError("Packet size must be greater than 1024 bytes");
         }
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::PacketSize);
     }
 
     // Resolve --display option
     if (parser.isSet("display-mode")) {
         preferences->windowMode = mapValue(m_WindowModeMap, parser.getChoiceOptionValue("display-mode"));
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::WindowMode);
     }
 
     // Resolve --vsync and --no-vsync options
     preferences->enableVsync = parser.getToggleOptionValue("vsync", preferences->enableVsync);
+    if (parser.isSet("vsync") || parser.isSet("no-vsync")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::Vsync);
+    }
 
     // Resolve --audio-config option
     if (parser.isSet("audio-config")) {
         preferences->audioConfig = mapValue(m_AudioConfigMap, parser.getChoiceOptionValue("audio-config"));
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::AudioConfig);
     }
 
     // Resolve --multi-controller and --no-multi-controller options
     preferences->multiController = parser.getToggleOptionValue("multi-controller", preferences->multiController);
+    if (parser.isSet("multi-controller") || parser.isSet("no-multi-controller")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::MultiController);
+    }
 
     // Resolve --quit-after and --no-quit-after options
     preferences->quitAppAfter = parser.getToggleOptionValue("quit-after", preferences->quitAppAfter);
+    if (parser.isSet("quit-after") || parser.isSet("no-quit-after")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::QuitAfter);
+    }
 
     // Resolve --absolute-mouse and --no-absolute-mouse options
     preferences->absoluteMouseMode = parser.getToggleOptionValue("absolute-mouse", preferences->absoluteMouseMode);
+    if (parser.isSet("absolute-mouse") || parser.isSet("no-absolute-mouse")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::AbsoluteMouse);
+    }
 
     // Resolve --mouse-buttons-swap and --no-mouse-buttons-swap options
     preferences->swapMouseButtons = parser.getToggleOptionValue("mouse-buttons-swap", preferences->swapMouseButtons);
+    if (parser.isSet("mouse-buttons-swap") || parser.isSet("no-mouse-buttons-swap")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::SwapMouseButtons);
+    }
 
     // Resolve --touchscreen-trackpad and --no-touchscreen-trackpad options
     preferences->absoluteTouchMode = !parser.getToggleOptionValue("touchscreen-trackpad", !preferences->absoluteTouchMode);
+    if (parser.isSet("touchscreen-trackpad") || parser.isSet("no-touchscreen-trackpad")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::AbsoluteTouch);
+    }
 
     // Resolve --game-optimization and --no-game-optimization options
     preferences->gameOptimizations = parser.getToggleOptionValue("game-optimization", preferences->gameOptimizations);
+    if (parser.isSet("game-optimization") || parser.isSet("no-game-optimization")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::GameOptimizations);
+    }
 
     // Resolve --audio-on-host and --no-audio-on-host options
     preferences->playAudioOnHost = parser.getToggleOptionValue("audio-on-host", preferences->playAudioOnHost);
+    if (parser.isSet("audio-on-host") || parser.isSet("no-audio-on-host")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::PlayAudioOnHost);
+    }
 
     // Resolve --frame-pacing and --no-frame-pacing options
     preferences->framePacing = parser.getToggleOptionValue("frame-pacing", preferences->framePacing);
+    if (parser.isSet("frame-pacing") || parser.isSet("no-frame-pacing")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::FramePacing);
+    }
 
     // Resolve --mute-on-focus-loss and --no-mute-on-focus-loss options
     preferences->muteOnFocusLoss = parser.getToggleOptionValue("mute-on-focus-loss", preferences->muteOnFocusLoss);
+    if (parser.isSet("mute-on-focus-loss") || parser.isSet("no-mute-on-focus-loss")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::MuteOnFocusLoss);
+    }
 
     // Resolve --background-gamepad and --no-background-gamepad options
     preferences->backgroundGamepad = parser.getToggleOptionValue("background-gamepad", preferences->backgroundGamepad);
+    if (parser.isSet("background-gamepad") || parser.isSet("no-background-gamepad")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::BackgroundGamepad);
+    }
 
     // Resolve --reverse-scroll-direction and --no-reverse-scroll-direction options
     preferences->reverseScrollDirection = parser.getToggleOptionValue("reverse-scroll-direction", preferences->reverseScrollDirection);
+    if (parser.isSet("reverse-scroll-direction") || parser.isSet("no-reverse-scroll-direction")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::ReverseScroll);
+    }
 
     // Resolve --swap-gamepad-buttons and --no-swap-gamepad-buttons options
     preferences->swapFaceButtons = parser.getToggleOptionValue("swap-gamepad-buttons", preferences->swapFaceButtons);
+    if (parser.isSet("swap-gamepad-buttons") || parser.isSet("no-swap-gamepad-buttons")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::SwapFaceButtons);
+    }
 
     // Resolve --keep-awake and --no-keep-awake options
     preferences->keepAwake = parser.getToggleOptionValue("keep-awake", preferences->keepAwake);
+    if (parser.isSet("keep-awake") || parser.isSet("no-keep-awake")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::KeepAwake);
+    }
 
     // Resolve --performance-overlay and --no-performance-overlay options
     preferences->showPerformanceOverlay = parser.getToggleOptionValue("performance-overlay", preferences->showPerformanceOverlay);
+    if (parser.isSet("performance-overlay") || parser.isSet("no-performance-overlay")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::PerformanceOverlay);
+    }
 
     // Resolve --hdr and --no-hdr options
     preferences->enableHdr = parser.getToggleOptionValue("hdr", preferences->enableHdr);
+    if (parser.isSet("hdr") || parser.isSet("no-hdr")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::Hdr);
+    }
 
     // Resolve --yuv444 and --no-yuv444 options
     preferences->enableYUV444 = parser.getToggleOptionValue("yuv444", preferences->enableYUV444);
+    if (parser.isSet("yuv444") || parser.isSet("no-yuv444")) {
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::Yuv444);
+    }
     
     // Resolve --capture-system-keys option
     if (parser.isSet("capture-system-keys")) {
         preferences->captureSysKeysMode = mapValue(m_CaptureSysKeysModeMap, parser.getChoiceOptionValue("capture-system-keys"));
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::CaptureSystemKeys);
     }
 
     // Resolve --video-codec option
     if (parser.isSet("video-codec")) {
         preferences->videoCodecConfig = mapValue(m_VideoCodecMap, parser.getChoiceOptionValue("video-codec"));
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::VideoCodec);
     }
 
     // Resolve --video-decoder option
     if (parser.isSet("video-decoder")) {
         preferences->videoDecoderSelection = mapValue(m_VideoDecoderMap, parser.getChoiceOptionValue("video-decoder"));
+        request.cliOverrides.markExplicit(StreamLaunchOverrides::VideoDecoder);
     }
 
     // This method will not return and terminates the process if --version or
@@ -527,27 +588,13 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     if (posArgs.length() < 2) {
         parser.showError("Host not provided");
     }
-    m_Host = parser.positionalArguments().at(1);
+    request.host = parser.positionalArguments().at(1);
 
     if (posArgs.length() < 3) {
         parser.showError("App not provided");
     }
-    m_AppName = parser.positionalArguments().at(2);
-}
-
-QString StreamCommandLineParser::getHost() const
-{
-    return m_Host;
-}
-
-QString StreamCommandLineParser::getAppName() const
-{
-    return m_AppName;
-}
-
-QSet<QString> StreamCommandLineParser::getExplicitOptions() const
-{
-    return m_ExplicitOptions;
+    request.appName = parser.positionalArguments().at(2);
+    return request;
 }
 
 ListCommandLineParser::ListCommandLineParser()

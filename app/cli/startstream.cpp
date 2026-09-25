@@ -61,7 +61,7 @@ public:
                 m_State = StateSeekComputer;
                 m_ComputerManager = event.computerManager;
 
-                m_ComputerSeeker = new ComputerSeeker(m_ComputerManager, m_ComputerName, q);
+                m_ComputerSeeker = new ComputerSeeker(m_ComputerManager, m_Request.host, q);
                 q->connect(m_ComputerSeeker, &ComputerSeeker::computerFound,
                            q, &Launcher::onComputerFound);
                 q->connect(m_ComputerSeeker, &ComputerSeeker::errorTimeout,
@@ -102,7 +102,7 @@ public:
                     m_TimeoutTimer->stop();
                     if (isNotStreaming() || isStreamingApp(app)) {
                         m_State = StateStartSession;
-                        session = new Session(m_Computer, app, m_Preferences, m_ExplicitOptions);
+                        session = new Session(m_Computer, app, m_Request);
                         emit q->sessionCreated(app.name, session);
                     } else {
                         emit q->appQuitRequired(getCurrentAppName());
@@ -130,11 +130,11 @@ public:
         case Event::Timedout:
             if (m_State == StateSeekComputer) {
                 m_State = StateFailure;
-                emit q->failed(QObject::tr("Failed to connect to %1").arg(m_ComputerName));
+                emit q->failed(QObject::tr("Failed to connect to %1").arg(m_Request.host));
             }
             if (m_State == StateSeekApp) {
                 m_State = StateFailure;
-                emit q->failed(QObject::tr("Failed to find application %1").arg(m_AppName));
+                emit q->failed(QObject::tr("Failed to find application %1").arg(m_Request.appName));
             }
             break;
         }
@@ -143,7 +143,7 @@ public:
     int getAppIndex() const
     {
         for (int i = 0; i < m_Computer->appList.length(); i++) {
-            if (m_Computer->appList[i].name.toLower() == m_AppName.toLower()) {
+            if (m_Computer->appList[i].name.toLower() == m_Request.appName.toLower()) {
                 return i;
             }
         }
@@ -171,10 +171,7 @@ public:
     }
 
     Launcher *q_ptr;
-    QString m_ComputerName;
-    QString m_AppName;
-    StreamingPreferences *m_Preferences;
-    QSet<QString> m_ExplicitOptions;
+    StreamLaunchRequest m_Request;
     ComputerManager *m_ComputerManager;
     ComputerSeeker *m_ComputerSeeker;
     NvComputer *m_Computer;
@@ -182,16 +179,12 @@ public:
     QTimer *m_TimeoutTimer;
 };
 
-Launcher::Launcher(QString computer, QString app,
-                   StreamingPreferences* preferences, const QSet<QString>& explicitOptions, QObject *parent)
+Launcher::Launcher(const StreamLaunchRequest& request, QObject *parent)
     : QObject(parent),
       m_DPtr(new LauncherPrivate(this))
 {
     Q_D(Launcher);
-    d->m_ComputerName = computer;
-    d->m_AppName = app;
-    d->m_Preferences = preferences;
-    d->m_ExplicitOptions = explicitOptions;
+    d->m_Request = request;
     d->m_State = StateInit;
     d->m_TimeoutTimer = new QTimer(this);
     d->m_TimeoutTimer->setSingleShot(true);

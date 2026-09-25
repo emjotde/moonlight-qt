@@ -136,7 +136,8 @@ private slots:
         const auto before = settingsSnapshot(settings);
         const auto profile = AppStreamingSettings::load(settings, "host-a", 42);
         QVERIFY(!profile.enabled);
-        QScopedPointer<StreamingPreferences> effective(AppStreamingSettings::resolve(*global, profile));
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, profile, StreamLaunchRequest()));
         for (int i = global->metaObject()->propertyOffset(); i < global->metaObject()->propertyCount(); ++i) {
             const QMetaProperty property = global->metaObject()->property(i);
             QCOMPARE(property.read(effective.data()), property.read(global));
@@ -167,8 +168,9 @@ private slots:
         profile.height = height;
         QSettings settings;
         QCOMPARE(AppStreamingSettings::save(settings, "host-a", 42, profile), QString());
-        QScopedPointer<StreamingPreferences> effective(AppStreamingSettings::resolve(
-            *StreamingPreferences::get(), AppStreamingSettings::load(settings, "host-a", 42)));
+        QScopedPointer<StreamingPreferences> effective(StreamLaunchPreferences::resolve(
+            *StreamingPreferences::get(), AppStreamingSettings::load(settings, "host-a", 42),
+            StreamLaunchRequest()));
         QCOMPARE(effective->width, width);
         QCOMPARE(effective->height, height);
         QCOMPARE(effective->fps, 60);
@@ -182,14 +184,16 @@ private slots:
         auto profile = portraitProfile();
         profile.bitrateKbps = 65000;
         QCOMPARE(AppStreamingSettings::save(settings, "host-a", 42, profile), QString());
-        QScopedPointer<StreamingPreferences> custom(AppStreamingSettings::resolve(
-            *StreamingPreferences::get(), AppStreamingSettings::load(settings, "host-a", 42)));
+        QScopedPointer<StreamingPreferences> custom(StreamLaunchPreferences::resolve(
+            *StreamingPreferences::get(), AppStreamingSettings::load(settings, "host-a", 42),
+            StreamLaunchRequest()));
         QCOMPARE(custom->bitrateKbps, 65000);
         profile.bitrateKbps = 0;
         QCOMPARE(AppStreamingSettings::save(settings, "host-a", 42, profile), QString());
         StreamingPreferences::get()->bitrateKbps = 22000;
-        QScopedPointer<StreamingPreferences> inherited(AppStreamingSettings::resolve(
-            *StreamingPreferences::get(), AppStreamingSettings::load(settings, "host-a", 42)));
+        QScopedPointer<StreamingPreferences> inherited(StreamLaunchPreferences::resolve(
+            *StreamingPreferences::get(), AppStreamingSettings::load(settings, "host-a", 42),
+            StreamLaunchRequest()));
         QCOMPARE(inherited->bitrateKbps, 22000);
         QCOMPARE(AppStreamingSettings::load(settings, "host-a", 42).bitrateKbps, 0);
     }
@@ -223,12 +227,15 @@ private slots:
         QFETCH(int, fps);
         QFETCH(int, bitrate);
         auto global = StreamingPreferences::get();
-        StreamingPreferences cli(*global);
         StreamCommandLineParser parser;
-        parser.parse(QStringList({"moonlight", "stream", "host-a", "Desktop", "--video-codec", "HEVC", "--no-vsync"}) + options, &cli);
+        const auto request = parser.parse(
+            QStringList({"moonlight", "stream", "host-a", "Desktop",
+                         "--video-codec", "HEVC", "--no-vsync"}) + options,
+            *global);
         auto profile = portraitProfile();
         profile.bitrateKbps = 65000;
-        QScopedPointer<StreamingPreferences> effective(AppStreamingSettings::resolve(*global, profile, &cli, parser.getExplicitOptions()));
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, profile, request));
         QCOMPARE(effective->width, width);
         QCOMPARE(effective->height, height);
         QCOMPARE(effective->fps, fps);
@@ -244,15 +251,19 @@ private slots:
     void cliWithoutProfileKeepsLegacyBitrate()
     {
         auto global = StreamingPreferences::get();
-        StreamingPreferences cli(*global);
         StreamCommandLineParser parser;
-        parser.parse({"moonlight", "stream", "host-a", "Desktop", "--resolution", "2160x3840", "--fps", "120"}, &cli);
-        QScopedPointer<StreamingPreferences> effective(AppStreamingSettings::resolve(*global, AppStreamingOverride(), &cli, parser.getExplicitOptions()));
+        const auto request = parser.parse(
+            {"moonlight", "stream", "host-a", "Desktop",
+             "--resolution", "2160x3840", "--fps", "120"},
+            *global);
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, AppStreamingOverride(), request));
         QCOMPARE(effective->bitrateKbps, StreamingPreferences::getDefaultBitrate(2160, 3840, 120, false));
         QCOMPARE(effective->width, 2160);
         QCOMPARE(effective->height, 3840);
 
-        QScopedPointer<StreamingPreferences> withProfile(AppStreamingSettings::resolve(*global, portraitProfile(), &cli, parser.getExplicitOptions()));
+        QScopedPointer<StreamingPreferences> withProfile(
+            StreamLaunchPreferences::resolve(*global, portraitProfile(), request));
         QCOMPARE(withProfile->bitrateKbps, global->bitrateKbps);
         QCOMPARE(withProfile->fps, 120);
     }
@@ -264,8 +275,9 @@ private slots:
         QCOMPARE(AppStreamingSettings::remove(settings, "host-a", 42), QString());
         StreamingPreferences::get()->width = 2560;
         QSettings reopened;
-        QScopedPointer<StreamingPreferences> effective(AppStreamingSettings::resolve(
-            *StreamingPreferences::get(), AppStreamingSettings::load(reopened, "host-a", 42)));
+        QScopedPointer<StreamingPreferences> effective(StreamLaunchPreferences::resolve(
+            *StreamingPreferences::get(), AppStreamingSettings::load(reopened, "host-a", 42),
+            StreamLaunchRequest()));
         QCOMPARE(effective->width, 2560);
         QCOMPARE(effective->height, 1080);
         QCOMPARE(effective->bitrateKbps, 17000);
@@ -397,23 +409,74 @@ private slots:
         auto global = StreamingPreferences::get();
         const auto oldWindowMode = global->windowMode;
         const auto oldCaptureMode = global->captureSysKeysMode;
-        QScopedPointer<StreamingPreferences> effective(AppStreamingSettings::resolve(*global, saved));
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, saved, StreamLaunchRequest()));
         QCOMPARE(effective->windowMode, StreamingPreferences::WM_FULLSCREEN_DESKTOP);
         QCOMPARE(effective->captureSysKeysMode, StreamingPreferences::CSK_FULLSCREEN);
         QCOMPARE(effective->preferredDisplay, QString("portrait-monitor"));
 
-        StreamingPreferences cli(*global);
         StreamCommandLineParser parser;
-        parser.parse({"moonlight", "stream", "host-a", "Desktop", "--display-mode", "windowed",
-                      "--capture-system-keys", "never"}, &cli);
+        const auto request = parser.parse(
+            {"moonlight", "stream", "host-a", "Desktop", "--display-mode", "windowed",
+             "--capture-system-keys", "never"},
+            *global);
         QScopedPointer<StreamingPreferences> explicitValues(
-            AppStreamingSettings::resolve(*global, saved, &cli, parser.getExplicitOptions()));
+            StreamLaunchPreferences::resolve(*global, saved, request));
         QCOMPARE(explicitValues->windowMode, StreamingPreferences::WM_WINDOWED);
         QCOMPARE(explicitValues->captureSysKeysMode, StreamingPreferences::CSK_OFF);
         QCOMPARE(explicitValues->preferredDisplay, QString("portrait-monitor"));
         QCOMPARE(global->windowMode, oldWindowMode);
         QCOMPARE(global->captureSysKeysMode, oldCaptureMode);
         QVERIFY(global->preferredDisplay.isEmpty());
+    }
+
+    void typedLaunchRequestLayering()
+    {
+        auto global = StreamingPreferences::get();
+        global->width = 1280;
+        global->height = 720;
+        global->fps = 30;
+        global->bitrateKbps = 10000;
+        global->windowMode = StreamingPreferences::WM_WINDOWED;
+        global->videoCodecConfig = StreamingPreferences::VCC_AUTO;
+
+        auto profile = portraitProfile();
+        profile.bitrateKbps = 65000;
+        profile.windowMode = StreamingPreferences::WM_FULLSCREEN_DESKTOP;
+
+        StreamCommandLineParser parser;
+        auto request = parser.parse(
+            {"moonlight", "stream", "host-a", "Desktop",
+             "--resolution", "1920x1080", "--fps", "90", "--video-codec", "HEVC"},
+            *global);
+        QCOMPARE(request.host, QString("host-a"));
+        QCOMPARE(request.appName, QString("Desktop"));
+        QVERIFY(!request.hasAppId());
+
+        request.uriOverrides = StreamLaunchOverrides(*global);
+        request.uriOverrides.values()->width = 2160;
+        request.uriOverrides.values()->height = 3840;
+        request.uriOverrides.markExplicit(StreamLaunchOverrides::Resolution);
+        request.uriOverrides.values()->bitrateKbps = 80000;
+        request.uriOverrides.markExplicit(StreamLaunchOverrides::Bitrate);
+        request.uriOverrides.values()->windowMode = StreamingPreferences::WM_FULLSCREEN;
+        request.uriOverrides.markExplicit(StreamLaunchOverrides::WindowMode);
+
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, profile, request));
+        QCOMPARE(effective->width, 2160);
+        QCOMPARE(effective->height, 3840);
+        QCOMPARE(effective->fps, 90);
+        QCOMPARE(effective->bitrateKbps, 80000);
+        QCOMPARE(effective->windowMode, StreamingPreferences::WM_FULLSCREEN);
+        QCOMPARE(effective->videoCodecConfig, StreamingPreferences::VCC_FORCE_HEVC);
+
+        QCOMPARE(global->width, 1280);
+        QCOMPARE(global->height, 720);
+        QCOMPARE(global->fps, 30);
+        QCOMPARE(global->bitrateKbps, 10000);
+        QCOMPARE(global->windowMode, StreamingPreferences::WM_WINDOWED);
+        QCOMPARE(global->videoCodecConfig, StreamingPreferences::VCC_AUTO);
     }
 
     void oldProfilesInheritDesktopPreferences()
@@ -427,7 +490,8 @@ private slots:
         QCOMPARE(saved.windowMode, -1);
         QCOMPARE(saved.captureSysKeysMode, -1);
         QVERIFY(saved.preferredDisplay.isEmpty());
-        QScopedPointer<StreamingPreferences> effective(AppStreamingSettings::resolve(*global, saved));
+        QScopedPointer<StreamingPreferences> effective(
+            StreamLaunchPreferences::resolve(*global, saved, StreamLaunchRequest()));
         QCOMPARE(effective->windowMode, StreamingPreferences::WM_WINDOWED);
         QCOMPARE(effective->captureSysKeysMode, StreamingPreferences::CSK_ALWAYS);
     }

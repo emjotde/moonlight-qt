@@ -12,6 +12,7 @@
 #include "video/decoder.h"
 #include "audio/renderers/renderer.h"
 #include "video/overlaymanager.h"
+#include "streamlaunchrequest.h"
 
 class StreamDock;
 
@@ -103,8 +104,8 @@ class Session : public QObject
     friend class ExecThread;
 
 public:
-    explicit Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences = nullptr,
-                     const QSet<QString>& explicitOptions = {});
+    explicit Session(NvComputer* computer, NvApp& app,
+                     const StreamLaunchRequest& request = StreamLaunchRequest());
 
     // NB: This may not get destroyed for a long time! Don't put any cleanup here.
     // Use Session::exec() or DeferredSessionCleanupTask instead.

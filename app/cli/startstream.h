@@ -1,14 +1,12 @@
 #pragma once
 
 #include <QObject>
-#include <QSet>
 #include <QVariant>
+#include "streaming/streamlaunchrequest.h"
 
 class ComputerManager;
 class NvComputer;
 class Session;
-class StreamingPreferences;
-
 namespace CliStartStream
 {
 
@@ -21,10 +19,7 @@ class Launcher : public QObject
     Q_DECLARE_PRIVATE_D(m_DPtr, Launcher)
 
 public:
-    explicit Launcher(QString computer, QString app,
-                      StreamingPreferences* preferences,
-                      const QSet<QString>& explicitOptions,
-                      QObject *parent = nullptr);
+    explicit Launcher(const StreamLaunchRequest& request, QObject *parent = nullptr);
     ~Launcher();
     Q_INVOKABLE void execute(ComputerManager *manager);
     Q_INVOKABLE void quitRunningApp();

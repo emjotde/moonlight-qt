@@ -46,7 +46,11 @@ Session* AppModel::createSessionForApp(int appIndex)
     Q_ASSERT(appIndex < m_VisibleApps.count());
     NvApp app = m_VisibleApps.at(appIndex);
 
-    return new Session(m_Computer, app);
+    StreamLaunchRequest request;
+    request.host = m_Computer->uuid;
+    request.appId = app.id;
+    request.appName = app.name;
+    return new Session(m_Computer, app, request);
 }
 
 bool AppModel::containsAppId(int appId) const

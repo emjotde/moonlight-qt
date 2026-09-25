@@ -1,9 +1,8 @@
 #pragma once
 
-#include "settings/streamingpreferences.h"
+#include "streaming/streamlaunchrequest.h"
 
 #include <QMap>
-#include <QSet>
 #include <QString>
 
 class GlobalCommandLineParser
@@ -60,17 +59,9 @@ public:
     StreamCommandLineParser();
     virtual ~StreamCommandLineParser();
 
-    void parse(const QStringList &args, StreamingPreferences *preferences);
-
-    QString getHost() const;
-    QString getAppName() const;
-
-    QSet<QString> getExplicitOptions() const;
+    StreamLaunchRequest parse(const QStringList &args, const StreamingPreferences& globalPreferences);
 
 private:
-    QString m_Host;
-    QString m_AppName;
-    QSet<QString> m_ExplicitOptions;
     QMap<QString, StreamingPreferences::WindowMode> m_WindowModeMap;
     QMap<QString, StreamingPreferences::AudioConfig> m_AudioConfigMap;
     QMap<QString, StreamingPreferences::VideoCodecConfig> m_VideoCodecMap;

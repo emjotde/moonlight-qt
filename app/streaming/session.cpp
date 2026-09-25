@@ -543,17 +543,15 @@ bool Session::populateDecoderProperties(SDL_Window* window)
 }
 
 static StreamingPreferences* resolveStreamPreferences(NvComputer* computer, const NvApp& app,
-                                                     StreamingPreferences* cli,
-                                                     const QSet<QString>& explicitOptions)
+                                                     const StreamLaunchRequest& request)
 {
     QSettings settings;
     const auto profile = AppStreamingSettings::load(settings, computer->uuid, app.id);
-    return AppStreamingSettings::resolve(*StreamingPreferences::get(), profile, cli, explicitOptions);
+    return StreamLaunchPreferences::resolve(*StreamingPreferences::get(), profile, request);
 }
 
-Session::Session(NvComputer* computer, NvApp& app, StreamingPreferences *preferences,
-                 const QSet<QString>& explicitOptions)
-    : m_Preferences(resolveStreamPreferences(computer, app, preferences, explicitOptions)),
+Session::Session(NvComputer* computer, NvApp& app, const StreamLaunchRequest& request)
+    : m_Preferences(resolveStreamPreferences(computer, app, request)),
       m_IsFullScreen(m_Preferences->windowMode != StreamingPreferences::WM_WINDOWED || !WMUtils::isRunningDesktopEnvironment()),
       m_Computer(computer),
       m_App(app),

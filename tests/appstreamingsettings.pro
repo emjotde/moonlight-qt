@@ -12,6 +12,7 @@ SOURCES += \
     ../app/settings/appstreamingsettings.cpp \
     ../app/settings/streamingpreferences.cpp \
     ../app/cli/commandlineparser.cpp \
+    ../app/streaming/streamlaunchrequest.cpp \
     ../app/backend/streamdisplays.cpp \
     ../app/wm.cpp
 
@@ -19,7 +20,9 @@ HEADERS += \
     ../app/settings/appstreamingsettings.h \
     ../app/settings/streamingpreferences.h \
     ../app/cli/commandlineparser.h
-HEADERS += ../app/backend/streamdisplays.h ../app/streaming/input/keyboardrouting.h
+HEADERS += ../app/backend/streamdisplays.h \
+    ../app/streaming/input/keyboardrouting.h \
+    ../app/streaming/streamlaunchrequest.h
 
 win32 {
     INCLUDEPATH += ../libs/windows/include

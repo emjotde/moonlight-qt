@@ -1,9 +1,6 @@
 #pragma once
 
-#include <QSet>
 #include <QSettings>
-
-class StreamingPreferences;
 
 struct AppStreamingOverride
 {
@@ -26,11 +23,6 @@ public:
     static QString save(QSettings& settings, const QString& hostUuid, int appId,
                         const AppStreamingOverride& profile);
     static QString remove(QSettings& settings, const QString& hostUuid, int appId);
-
-    static StreamingPreferences* resolve(const StreamingPreferences& global,
-                                         const AppStreamingOverride& profile,
-                                         const StreamingPreferences* cli = nullptr,
-                                         const QSet<QString>& explicitOptions = {});
 
 private:
     static QString key(const QString& hostUuid, int appId);
