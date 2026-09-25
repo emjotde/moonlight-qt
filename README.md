@@ -8,7 +8,8 @@ This is an unofficial fork based on Moonlight Qt v6.1.0, modified on September 2
 2026 (UTC), with per-application streaming profiles and Windows desktop controls.
 The upstream downloads linked below do not include these changes. See
 **Per-application stream settings** and **Windows stream controls** below for
-the fork's features.
+the fork's features. See [Moonlight URI launching on Windows](docs/URI-LAUNCHING.md)
+for secure dashboard and shortcut integration.
 
 You can follow development on our [Discord server](https://moonlight-stream.org/discord) and help translate Moonlight into your language on [Weblate](https://hosted.weblate.org/projects/moonlight/moonlight-qt/).
 
@@ -118,6 +119,17 @@ The dock uses a native Windows tool window, because streaming intentionally
 suspends Qt's UI event loop. It does not resume the main UI or change the stream
 protocol.
 
+#### Windows URI launches
+
+Windows dashboards and shortcuts can request a typed stream launch through
+`moonlight://stream`. External requests are confirmed by default, trusted hosts
+are keyed by paired UUID, and a second URI process forwards to the existing
+Moonlight instance. The installer registers the protocol per-user; portable
+builds provide `--register-uri` and `--unregister-uri`.
+
+See [docs/URI-LAUNCHING.md](docs/URI-LAUNCHING.md) for the grammar, supported
+parameters, precedence, security model, registration details, and CLI fallback.
+
 #### Profile tests
 
 The focused Qt Test suite uses temporary INI files, never your Moonlight
@@ -126,7 +138,9 @@ resolutions, bitrate inheritance, CLI precedence and legacy behavior, reset,
 host/app isolation, a separate-process persistence check, existing settings,
 invalid input, write failures, desktop-preference inheritance, monitor identity
 under reordering/disconnection, shortcut capture policy, whole-chord input
-filtering, and the scrollable QML dialog.
+filtering, the scrollable QML dialog, URI validation and precedence, external
+confirmation/trust, startup queueing, cross-process forwarding, duplicate
+suppression, and Windows protocol registration/removal.
 
 From a Qt/MSVC command prompt, with submodules initialized:
 

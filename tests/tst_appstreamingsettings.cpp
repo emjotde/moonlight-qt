@@ -508,6 +508,15 @@ private slots:
         QCOMPARE(values->windowMode, StreamingPreferences::WM_FULLSCREEN);
     }
 
+    void browserCanonicalStreamSlash()
+    {
+        const auto result = UriLaunchRequestParser::parse(
+            "moonlight://stream/?host=host-a&app=Landscape%20Desktop",
+            *StreamingPreferences::get());
+        QVERIFY2(result.isValid(), qPrintable(result.error));
+        QCOMPARE(result.request.appName, QString("Landscape Desktop"));
+    }
+
     void validPortraitUri()
     {
         const auto result = UriLaunchRequestParser::parse(
@@ -544,7 +553,7 @@ private slots:
 
     void appIdPrecedesNameThenFallsBack()
     {
-        const auto result = UriLaunchRequestParser::parse(
+        auto result = UriLaunchRequestParser::parse(
             "moonlight://stream?host=host-a&app=Wrong%20Name&appId=42",
             *StreamingPreferences::get());
         QVERIFY2(result.isValid(), qPrintable(result.error));
@@ -561,6 +570,8 @@ private slots:
 
         apps.removeLast();
         QCOMPARE(result.request.findAppIndex(apps), 0);
+        result.request.appName = "Missing";
+        QCOMPARE(result.request.findAppIndex(apps), -1);
     }
 
     void uriOverridesCliAndProfile()
@@ -769,6 +780,18 @@ private slots:
         QCOMPARE(ExternalLaunchTrust::shouldConfirm(enabled, paired, trusted), expected);
     }
 
+    void externalHostPolicy()
+    {
+        QCOMPARE(ExternalLaunchTrust::hostAction(false, false, false),
+                 ExternalLaunchTrust::UnknownHost);
+        QCOMPARE(ExternalLaunchTrust::hostAction(true, false, true),
+                 ExternalLaunchTrust::OfflineHost);
+        QCOMPARE(ExternalLaunchTrust::hostAction(true, true, false),
+                 ExternalLaunchTrust::PairHost);
+        QCOMPARE(ExternalLaunchTrust::hostAction(true, true, true),
+                 ExternalLaunchTrust::LaunchHost);
+    }
+
     void externalLaunchDialogShowsDetailsAndCancels()
     {
         QQmlEngine engine;
@@ -858,6 +881,18 @@ private slots:
         QVERIFY(!name.contains("Test User"));
         QCOMPARE(name, SingleInstanceRouter::nameForSettingsFile(path));
         QVERIFY(name != SingleInstanceRouter::nameForSettingsFile(path + ".other"));
+    }
+
+    void singleInstanceEndpointCanBeReused()
+    {
+        const QString serverName =
+            "MoonlightUriReuse-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        {
+            SingleInstanceRouter first(serverName);
+            QVERIFY(first.listen());
+        }
+        SingleInstanceRouter replacement(serverName);
+        QVERIFY(replacement.listen());
     }
 
 #ifdef Q_OS_WIN

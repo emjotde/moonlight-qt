@@ -128,8 +128,11 @@ UriLaunchParseResult UriLaunchRequestParser::parse(
         return result;
     }
     const int queryStart = uri.indexOf('?');
-    const QString action = uri.mid(prefix.size(),
-                                   queryStart < 0 ? -1 : queryStart - prefix.size());
+    QString action = uri.mid(prefix.size(),
+                             queryStart < 0 ? -1 : queryStart - prefix.size());
+    if (action.endsWith('/')) {
+        action.chop(1);
+    }
     if (action.compare(QStringLiteral("stream"), Qt::CaseInsensitive) != 0) {
         result.error = QObject::tr("Unknown Moonlight URI action: %1").arg(action);
         return result;

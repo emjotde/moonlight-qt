@@ -15,6 +15,19 @@ bool ExternalLaunchTrust::shouldConfirm(bool confirmationEnabled,
     return confirmationEnabled && hostPaired && !hostTrusted;
 }
 
+ExternalLaunchTrust::HostAction ExternalLaunchTrust::hostAction(bool known,
+                                                                bool online,
+                                                                bool paired)
+{
+    if (!known) {
+        return UnknownHost;
+    }
+    if (!online) {
+        return OfflineHost;
+    }
+    return paired ? LaunchHost : PairHost;
+}
+
 bool ExternalLaunchTrust::isTrusted(QSettings& settings, const QString& hostUuid)
 {
     if (hostUuid.isEmpty()) {

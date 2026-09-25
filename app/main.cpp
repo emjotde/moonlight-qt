@@ -12,6 +12,7 @@
 #include <QElapsedTimer>
 #include <QTemporaryFile>
 #include <QRegularExpression>
+#include <QFileInfo>
 
 // Don't let SDL hook our main function, since Qt is already
 // doing the same thing. This needs to be before any headers
@@ -308,10 +309,15 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationDomain("moonlight-stream.com");
     QCoreApplication::setApplicationName("Moonlight");
 
-    if (QFile(QDir::currentPath() + "/portable.dat").exists()) {
+    const QString executableDir =
+        QFileInfo(QString::fromLocal8Bit(argv[0])).absolutePath();
+    if (QFile(QDir(executableDir).filePath("portable.dat")).exists()) {
+        // Protocol handlers do not inherit the executable's working directory.
+        // Keep portable settings, cache, and logs next to the executable anyway.
+        QDir::setCurrent(executableDir);
         QSettings::setDefaultFormat(QSettings::IniFormat);
-        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QDir::currentPath());
-        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, QDir::currentPath());
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, executableDir);
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, executableDir);
 
         // Initialize paths for portable mode
         Path::initialize(true);

@@ -22,6 +22,14 @@ ComputerSeeker::ComputerSeeker(ComputerManager *manager, QString computerName, Q
 
 void ComputerSeeker::start(int timeout)
 {
+    NvComputer* knownComputer = findComputer(m_ComputerManager, m_ComputerName);
+    if (knownComputer && isOnline(knownComputer)) {
+        QTimer::singleShot(0, this, [this, knownComputer]() {
+            emit computerFound(knownComputer);
+        });
+        return;
+    }
+
     m_TimeoutTimer->start(timeout);
     // Seek desired computer by both connecting to it directly (this may fail
     // if m_ComputerName is UUID, or the name that doesn't resolve to an IP

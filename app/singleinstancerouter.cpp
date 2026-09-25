@@ -40,6 +40,23 @@ protected:
         });
         m_Listening = server.listen(m_ServerName);
         if (!m_Listening) {
+            QLocalSocket probe;
+            probe.connectToServer(m_ServerName);
+            const bool activeOwner = probe.waitForConnected(500);
+            if (activeOwner) {
+                probe.disconnectFromServer();
+            }
+            else {
+                // A crashed process can leave a stale local-server endpoint.
+                // Remove it only after proving that no active owner accepts connections.
+                QLocalServer::removeServer(m_ServerName);
+                m_Listening = server.listen(m_ServerName);
+                if (m_Listening) {
+                    qInfo() << "Recovered stale single-instance URI endpoint";
+                }
+            }
+        }
+        if (!m_Listening) {
             qInfo() << "Single-instance URI server is unavailable:" << server.errorString();
         }
         m_Started.release();
@@ -181,8 +198,15 @@ bool SingleInstanceRouter::forward(const QString& serverName, const QString& mes
     frame.append(payload);
 
     QLocalSocket socket;
-    socket.connectToServer(serverName, QIODevice::ReadWrite);
-    if (!socket.waitForConnected(750)) {
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        socket.connectToServer(serverName, QIODevice::ReadWrite);
+        if (socket.waitForConnected(200)) {
+            break;
+        }
+        socket.abort();
+        QThread::msleep(50);
+    }
+    if (socket.state() != QLocalSocket::ConnectedState) {
         return false;
     }
     if (socket.write(frame) != frame.size()) {

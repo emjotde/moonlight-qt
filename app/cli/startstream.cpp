@@ -205,15 +205,19 @@ public:
                 emit q->searchingComputer();
             }
             break;
-        case Event::ComputerFound:
+        case Event::ComputerFound: {
             if (m_State != StateSeekComputer) {
                 break;
             }
             m_Computer = event.computer;
-            if (m_Computer->pairState == NvComputer::PS_PAIRED) {
+            const auto action = ExternalLaunchTrust::hostAction(
+                true, m_Computer->state == NvComputer::CS_ONLINE,
+                m_Computer->pairState == NvComputer::PS_PAIRED);
+            if (action == ExternalLaunchTrust::LaunchHost) {
                 beginAppSearch();
             }
-            else if (m_Request.source == StreamLaunchRequest::UriSource) {
+            else if (action == ExternalLaunchTrust::PairHost &&
+                     m_Request.source == StreamLaunchRequest::UriSource) {
                 m_State = StatePairing;
                 const QString pin = m_ComputerManager->generatePinString();
                 m_ComputerManager->pairHost(m_Computer, pin);
@@ -225,6 +229,7 @@ public:
                          .arg(m_Computer->name));
             }
             break;
+        }
         case Event::ComputerUpdated:
             if (event.computer != m_Computer) {
                 break;
@@ -253,11 +258,14 @@ public:
                 }
             }
             break;
-        case Event::Timedout:
+        case Event::Timedout: {
             if (m_State == StateSeekComputer) {
                 NvComputer* known =
                     ComputerSeeker::findComputer(m_ComputerManager, m_Request.host);
-                if (known) {
+                const auto action = ExternalLaunchTrust::hostAction(
+                    known != nullptr, false, known &&
+                        known->pairState == NvComputer::PS_PAIRED);
+                if (action == ExternalLaunchTrust::OfflineHost) {
                     fail(QObject::tr("Host %1 is offline.").arg(known->name));
                 }
                 else {
@@ -269,6 +277,7 @@ public:
                          .arg(m_Request.appDescription(), m_Computer->name));
             }
             break;
+        }
         }
     }
 
